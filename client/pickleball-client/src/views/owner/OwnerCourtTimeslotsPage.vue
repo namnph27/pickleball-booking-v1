@@ -1,0 +1,710 @@
+<script setup lang="ts">
+import { ref, computed, onMounted } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
+import { useI18n } from 'vue-i18n';
+import { useCourtStore } from '../../store/court';
+import { useCourtService, type CourtTimeslot } from '../../services/CourtService';
+import { useToast } from '../../composables/useToast';
+import BaseLayout from '../../components/layout/BaseLayout.vue';
+import BaseButton from '../../components/base/BaseButton.vue';
+import BaseCard from '../../components/base/BaseCard.vue';
+import BaseSpinner from '../../components/base/BaseSpinner.vue';
+import BaseAlert from '../../components/base/BaseAlert.vue';
+import BaseModal from '../../components/base/BaseModal.vue';
+import BaseInput from '../../components/base/BaseInput.vue';
+import BaseSelect from '../../components/base/BaseSelect.vue';
+
+const { t } = useI18n();
+const route = useRoute();
+const router = useRouter();
+const courtStore = useCourtStore();
+const courtService = useCourtService();
+const toast = useToast();
+
+// State
+const courtId = computed(() => Number(route.params.id));
+const timeslots = ref<CourtTimeslot[]>([]);
+const loading = ref(false);
+const showAddModal = ref(false);
+const showEditModal = ref(false);
+const showDeleteModal = ref(false);
+const isSubmitting = ref(false);
+const selectedTimeslot = ref<CourtTimeslot | null>(null);
+
+// Form state
+const dayOfWeek = ref(1);
+const startTime = ref('');
+const endTime = ref('');
+const isAvailable = ref(true);
+
+// Day of week options
+const dayOptions = computed(() => [
+  { value: 1, label: t('common.monday') },
+  { value: 2, label: t('common.tuesday') },
+  { value: 3, label: t('common.wednesday') },
+  { value: 4, label: t('common.thursday') },
+  { value: 5, label: t('common.friday') },
+  { value: 6, label: t('common.saturday') },
+  { value: 0, label: t('common.sunday') }
+]);
+
+// Grouped timeslots by day
+const groupedTimeslots = computed(() => {
+  const grouped: Record<number, CourtTimeslot[]> = {};
+  
+  // Initialize all days
+  for (let i = 0; i <= 6; i++) {
+    grouped[i] = [];
+  }
+  
+  // Group timeslots by day
+  timeslots.value.forEach(timeslot => {
+    grouped[timeslot.day_of_week].push(timeslot);
+  });
+  
+  // Sort timeslots by start time
+  for (const day in grouped) {
+    grouped[Number(day)].sort((a, b) => {
+      return a.start_time.localeCompare(b.start_time);
+    });
+  }
+  
+  return grouped;
+});
+
+// Format time
+const formatTime = (timeString: string) => {
+  const date = new Date(`2000-01-01T${timeString}`);
+  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+};
+
+// Open add modal
+const openAddModal = () => {
+  // Reset form
+  dayOfWeek.value = 1;
+  startTime.value = '';
+  endTime.value = '';
+  isAvailable.value = true;
+  
+  showAddModal.value = true;
+};
+
+// Open edit modal
+const openEditModal = (timeslot: CourtTimeslot) => {
+  selectedTimeslot.value = timeslot;
+  
+  // Populate form
+  dayOfWeek.value = timeslot.day_of_week;
+  startTime.value = timeslot.start_time;
+  endTime.value = timeslot.end_time;
+  isAvailable.value = timeslot.is_available;
+  
+  showEditModal.value = true;
+};
+
+// Open delete modal
+const openDeleteModal = (timeslot: CourtTimeslot) => {
+  selectedTimeslot.value = timeslot;
+  showDeleteModal.value = true;
+};
+
+// Add timeslot
+const addTimeslot = async () => {
+  if (!startTime.value || !endTime.value) {
+    toast.error(t('courtOwner.timeslotTimeRequired'));
+    return;
+  }
+  
+  isSubmitting.value = true;
+  
+  try {
+    const timeslotData = {
+      day_of_week: dayOfWeek.value,
+      start_time: startTime.value,
+      end_time: endTime.value,
+      is_available: isAvailable.value
+    };
+    
+    await courtService.createTimeslot(courtId.value, timeslotData);
+    
+    toast.success(t('courtOwner.timeslotAdded'));
+    showAddModal.value = false;
+    
+    // Refresh timeslots
+    fetchTimeslots();
+  } catch (error) {
+    toast.error(typeof error === 'string' ? error : t('courtOwner.timeslotAddError'));
+  } finally {
+    isSubmitting.value = false;
+  }
+};
+
+// Update timeslot
+const updateTimeslot = async () => {
+  if (!selectedTimeslot.value || !startTime.value || !endTime.value) {
+    toast.error(t('courtOwner.timeslotTimeRequired'));
+    return;
+  }
+  
+  isSubmitting.value = true;
+  
+  try {
+    const timeslotData = {
+      day_of_week: dayOfWeek.value,
+      start_time: startTime.value,
+      end_time: endTime.value,
+      is_available: isAvailable.value
+    };
+    
+    await courtService.updateTimeslot(courtId.value, selectedTimeslot.value.id, timeslotData);
+    
+    toast.success(t('courtOwner.timeslotUpdated'));
+    showEditModal.value = false;
+    
+    // Refresh timeslots
+    fetchTimeslots();
+  } catch (error) {
+    toast.error(typeof error === 'string' ? error : t('courtOwner.timeslotUpdateError'));
+  } finally {
+    isSubmitting.value = false;
+  }
+};
+
+// Delete timeslot
+const deleteTimeslot = async () => {
+  if (!selectedTimeslot.value) return;
+  
+  isSubmitting.value = true;
+  
+  try {
+    await courtService.deleteTimeslot(courtId.value, selectedTimeslot.value.id);
+    
+    toast.success(t('courtOwner.timeslotDeleted'));
+    showDeleteModal.value = false;
+    
+    // Refresh timeslots
+    fetchTimeslots();
+  } catch (error) {
+    toast.error(typeof error === 'string' ? error : t('courtOwner.timeslotDeleteError'));
+  } finally {
+    isSubmitting.value = false;
+  }
+};
+
+// Toggle timeslot availability
+const toggleAvailability = async (timeslot: CourtTimeslot) => {
+  try {
+    await courtService.updateTimeslot(courtId.value, timeslot.id, {
+      ...timeslot,
+      is_available: !timeslot.is_available
+    });
+    
+    toast.success(
+      timeslot.is_available 
+        ? t('courtOwner.timeslotMarkedUnavailable') 
+        : t('courtOwner.timeslotMarkedAvailable')
+    );
+    
+    // Refresh timeslots
+    fetchTimeslots();
+  } catch (error) {
+    toast.error(typeof error === 'string' ? error : t('courtOwner.timeslotUpdateError'));
+  }
+};
+
+// Fetch court timeslots
+const fetchTimeslots = async () => {
+  loading.value = true;
+  
+  try {
+    const response = await courtService.getCourtTimeslots(courtId.value);
+    timeslots.value = response.timeslots;
+  } catch (error) {
+    toast.error(typeof error === 'string' ? error : t('courtOwner.timeslotsFetchError'));
+  } finally {
+    loading.value = false;
+  }
+};
+
+// Fetch court details and timeslots on mount
+onMounted(async () => {
+  if (!courtId.value) {
+    router.push('/owner/courts');
+    return;
+  }
+  
+  try {
+    await Promise.all([
+      courtStore.getCourtById(courtId.value),
+      fetchTimeslots()
+    ]);
+  } catch (error) {
+    toast.error(typeof error === 'string' ? error : t('courtOwner.fetchError'));
+    router.push('/owner/courts');
+  }
+});
+</script>
+
+<template>
+  <BaseLayout 
+    :title="t('courtOwner.manageTimeslots')"
+    :subtitle="courtStore.currentCourt?.name"
+    :back-link="`/owner/courts`"
+    :loading="courtStore.loading"
+  >
+    <template v-if="courtStore.currentCourt">
+      <!-- Header Actions -->
+      <template #headerActions>
+        <BaseButton 
+          :label="t('courtOwner.addTimeslot')" 
+          variant="primary"
+          icon="pi-plus"
+          @click="openAddModal"
+        />
+      </template>
+      
+      <!-- Timeslots Content -->
+      <div class="timeslots-container">
+        <!-- Loading State -->
+        <div v-if="loading" class="timeslots-loading">
+          <BaseSpinner />
+        </div>
+        
+        <!-- No Timeslots -->
+        <div v-else-if="timeslots.length === 0" class="no-timeslots">
+          <i class="pi pi-clock no-timeslots-icon"></i>
+          <h3>{{ t('courtOwner.noTimeslots') }}</h3>
+          <p>{{ t('courtOwner.addTimeslotsDescription') }}</p>
+          <BaseButton 
+            :label="t('courtOwner.addFirstTimeslot')" 
+            variant="primary"
+            icon="pi-plus"
+            @click="openAddModal"
+          />
+        </div>
+        
+        <!-- Timeslots by Day -->
+        <div v-else class="timeslots-by-day">
+          <div 
+            v-for="(dayTimeslots, day) in groupedTimeslots" 
+            :key="day"
+            class="day-section"
+          >
+            <h3 class="day-title">{{ dayOptions.find(d => d.value === Number(day))?.label }}</h3>
+            
+            <div v-if="dayTimeslots.length === 0" class="no-day-timeslots">
+              <p>{{ t('courtOwner.noTimeslotsForDay') }}</p>
+              <BaseButton 
+                :label="t('courtOwner.addTimeslot')" 
+                variant="outline"
+                size="small"
+                @click="() => { dayOfWeek = Number(day); openAddModal(); }"
+              />
+            </div>
+            
+            <div v-else class="timeslots-grid">
+              <BaseCard 
+                v-for="timeslot in dayTimeslots" 
+                :key="timeslot.id"
+                class="timeslot-card"
+              >
+                <div class="timeslot-time">
+                  <i class="pi pi-clock"></i>
+                  <span>{{ formatTime(timeslot.start_time) }} - {{ formatTime(timeslot.end_time) }}</span>
+                </div>
+                
+                <div class="timeslot-status">
+                  <span :class="['status-badge', timeslot.is_available ? 'available' : 'unavailable']">
+                    {{ timeslot.is_available ? t('courts.available') : t('courts.unavailable') }}
+                  </span>
+                </div>
+                
+                <div class="timeslot-actions">
+                  <button 
+                    class="action-button"
+                    @click="openEditModal(timeslot)"
+                    title="Edit"
+                  >
+                    <i class="pi pi-pencil"></i>
+                  </button>
+                  
+                  <button 
+                    class="action-button"
+                    @click="toggleAvailability(timeslot)"
+                    title="Toggle Availability"
+                  >
+                    <i :class="`pi ${timeslot.is_available ? 'pi-eye-slash' : 'pi-eye'}`"></i>
+                  </button>
+                  
+                  <button 
+                    class="action-button action-button--danger"
+                    @click="openDeleteModal(timeslot)"
+                    title="Delete"
+                  >
+                    <i class="pi pi-trash"></i>
+                  </button>
+                </div>
+              </BaseCard>
+            </div>
+          </div>
+        </div>
+      </div>
+    </template>
+    
+    <!-- Add Timeslot Modal -->
+    <BaseModal
+      v-model="showAddModal"
+      :title="t('courtOwner.addTimeslot')"
+      :ok-text="t('courtOwner.addTimeslot')"
+      :cancel-text="t('common.cancel')"
+      :loading="isSubmitting"
+      @ok="addTimeslot"
+    >
+      <div class="timeslot-form">
+        <div class="form-group">
+          <BaseSelect
+            v-model="dayOfWeek"
+            :label="t('courtOwner.dayOfWeek')"
+            :options="dayOptions"
+            required
+          />
+        </div>
+        
+        <div class="form-row">
+          <div class="form-group">
+            <BaseInput
+              v-model="startTime"
+              type="time"
+              :label="t('courtOwner.startTime')"
+              required
+            />
+          </div>
+          
+          <div class="form-group">
+            <BaseInput
+              v-model="endTime"
+              type="time"
+              :label="t('courtOwner.endTime')"
+              required
+            />
+          </div>
+        </div>
+        
+        <div class="form-group">
+          <div class="checkbox-group">
+            <label class="checkbox-label">
+              <input 
+                type="checkbox" 
+                v-model="isAvailable"
+              />
+              <span>{{ t('courtOwner.timeslotAvailable') }}</span>
+            </label>
+          </div>
+        </div>
+      </div>
+    </BaseModal>
+    
+    <!-- Edit Timeslot Modal -->
+    <BaseModal
+      v-model="showEditModal"
+      :title="t('courtOwner.editTimeslot')"
+      :ok-text="t('courtOwner.updateTimeslot')"
+      :cancel-text="t('common.cancel')"
+      :loading="isSubmitting"
+      @ok="updateTimeslot"
+    >
+      <div class="timeslot-form">
+        <div class="form-group">
+          <BaseSelect
+            v-model="dayOfWeek"
+            :label="t('courtOwner.dayOfWeek')"
+            :options="dayOptions"
+            required
+          />
+        </div>
+        
+        <div class="form-row">
+          <div class="form-group">
+            <BaseInput
+              v-model="startTime"
+              type="time"
+              :label="t('courtOwner.startTime')"
+              required
+            />
+          </div>
+          
+          <div class="form-group">
+            <BaseInput
+              v-model="endTime"
+              type="time"
+              :label="t('courtOwner.endTime')"
+              required
+            />
+          </div>
+        </div>
+        
+        <div class="form-group">
+          <div class="checkbox-group">
+            <label class="checkbox-label">
+              <input 
+                type="checkbox" 
+                v-model="isAvailable"
+              />
+              <span>{{ t('courtOwner.timeslotAvailable') }}</span>
+            </label>
+          </div>
+        </div>
+      </div>
+    </BaseModal>
+    
+    <!-- Delete Timeslot Modal -->
+    <BaseModal
+      v-model="showDeleteModal"
+      :title="t('courtOwner.deleteTimeslot')"
+      :ok-text="t('courtOwner.confirmDelete')"
+      :cancel-text="t('common.cancel')"
+      ok-variant="danger"
+      :loading="isSubmitting"
+      @ok="deleteTimeslot"
+    >
+      <BaseAlert type="warning" :message="t('courtOwner.deleteTimeslotWarning')" />
+      
+      <div v-if="selectedTimeslot" class="delete-confirmation">
+        <p>{{ t('courtOwner.deleteTimeslotConfirmation') }}</p>
+        
+        <div class="timeslot-details">
+          <div class="detail-item">
+            <span class="detail-label">{{ t('courtOwner.dayOfWeek') }}:</span>
+            <span class="detail-value">{{ dayOptions.find(d => d.value === selectedTimeslot.day_of_week)?.label }}</span>
+          </div>
+          
+          <div class="detail-item">
+            <span class="detail-label">{{ t('courtOwner.time') }}:</span>
+            <span class="detail-value">{{ formatTime(selectedTimeslot.start_time) }} - {{ formatTime(selectedTimeslot.end_time) }}</span>
+          </div>
+        </div>
+      </div>
+    </BaseModal>
+  </BaseLayout>
+</template>
+
+<style scoped lang="scss">
+.timeslots-loading {
+  display: flex;
+  justify-content: center;
+  padding: 3rem 0;
+}
+
+.no-timeslots {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem 0;
+  text-align: center;
+  
+  .no-timeslots-icon {
+    font-size: 3rem;
+    color: var(--dark-gray);
+    margin-bottom: 1rem;
+  }
+  
+  h3 {
+    font-size: 1.25rem;
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+  }
+  
+  p {
+    color: var(--dark-gray);
+    margin-bottom: 1.5rem;
+    max-width: 500px;
+  }
+}
+
+.timeslots-by-day {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+  
+  .day-section {
+    .day-title {
+      font-size: 1.25rem;
+      font-weight: 600;
+      margin: 0 0 1rem 0;
+      padding-bottom: 0.5rem;
+      border-bottom: 1px solid var(--light-gray);
+    }
+    
+    .no-day-timeslots {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 1rem;
+      background-color: var(--light-gray);
+      border-radius: 8px;
+      
+      p {
+        margin: 0;
+        color: var(--dark-gray);
+      }
+    }
+    
+    .timeslots-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 1rem;
+    }
+  }
+}
+
+.timeslot-card {
+  display: flex;
+  align-items: center;
+  padding: 1rem;
+  
+  .timeslot-time {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-weight: 500;
+    
+    i {
+      color: var(--primary-color);
+    }
+  }
+  
+  .timeslot-status {
+    margin-right: 1rem;
+    
+    .status-badge {
+      display: inline-block;
+      padding: 0.25rem 0.5rem;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      font-weight: 500;
+      
+      &.available {
+        background-color: rgba(76, 175, 80, 0.1);
+        color: #2e7d32;
+      }
+      
+      &.unavailable {
+        background-color: rgba(244, 67, 54, 0.1);
+        color: #c62828;
+      }
+    }
+  }
+  
+  .timeslot-actions {
+    display: flex;
+    gap: 0.5rem;
+    
+    .action-button {
+      width: 32px;
+      height: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: none;
+      border: 1px solid var(--medium-gray);
+      border-radius: 4px;
+      color: var(--dark-gray);
+      cursor: pointer;
+      
+      &:hover {
+        background-color: var(--light-gray);
+        color: var(--text-color);
+      }
+      
+      &--danger:hover {
+        background-color: rgba(244, 67, 54, 0.1);
+        color: #f44336;
+        border-color: #f44336;
+      }
+    }
+  }
+}
+
+.timeslot-form {
+  .form-group {
+    margin-bottom: 1.5rem;
+    
+    &:last-child {
+      margin-bottom: 0;
+    }
+  }
+  
+  .form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+  }
+  
+  .checkbox-group {
+    .checkbox-label {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      cursor: pointer;
+      
+      input {
+        width: 18px;
+        height: 18px;
+      }
+    }
+  }
+}
+
+.delete-confirmation {
+  margin-top: 1.5rem;
+  
+  p {
+    margin-bottom: 1rem;
+  }
+  
+  .timeslot-details {
+    background-color: var(--light-gray);
+    padding: 1rem;
+    border-radius: 8px;
+    
+    .detail-item {
+      display: flex;
+      margin-bottom: 0.5rem;
+      
+      &:last-child {
+        margin-bottom: 0;
+      }
+      
+      .detail-label {
+        width: 100px;
+        font-weight: 500;
+      }
+    }
+  }
+}
+
+@media (max-width: 768px) {
+  .timeslot-card {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.75rem;
+    
+    .timeslot-status {
+      margin-right: 0;
+    }
+    
+    .timeslot-actions {
+      width: 100%;
+      justify-content: flex-end;
+    }
+  }
+  
+  .timeslot-form {
+    .form-row {
+      grid-template-columns: 1fr;
+    }
+  }
+}
+</style>
