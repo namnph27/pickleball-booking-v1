@@ -4,6 +4,7 @@ const User = require('../models/user.model');
 const Payment = require('../models/payment.model');
 const Promotion = require('../models/promotion.model');
 const BookingLock = require('../models/booking.lock.model');
+const BookingPlayer = require('../models/booking.player.model');
 const RewardService = require('../services/reward.service');
 const PromotionService = require('../services/promotion.service');
 const NotificationService = require('../services/notification.service');
@@ -11,7 +12,16 @@ const NotificationService = require('../services/notification.service');
 // Create a new booking
 const createBooking = async (req, res) => {
   try {
-    const { court_id, start_time, end_time, promotion_code } = req.body;
+    const {
+      court_id,
+      start_time,
+      end_time,
+      promotion_code,
+      skill_level,
+      current_players = 1,
+      needed_players = 4,
+      allow_join = false
+    } = req.body;
 
     // Validate required fields
     if (!court_id || !start_time || !end_time) {
@@ -80,8 +90,22 @@ const createBooking = async (req, res) => {
         start_time,
         end_time,
         total_price: totalPrice,
-        status: 'pending'
+        status: 'pending',
+        skill_level,
+        current_players,
+        needed_players,
+        allow_join
       });
+
+      // If this is a booking with allow_join, add the booker as a player
+      if (allow_join) {
+        await BookingPlayer.create({
+          booking_id: newBooking.id,
+          user_id: req.user.id,
+          is_booker: true,
+          players_count: current_players
+        });
+      }
 
       // Release the lock after successful booking
       await BookingLock.releaseLock({

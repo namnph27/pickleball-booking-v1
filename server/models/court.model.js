@@ -53,7 +53,7 @@ const Court = {
   // Find court by ID
   async findById(id) {
     const query = `
-      SELECT c.*, u.name as owner_name
+      SELECT c.*, u.name as owner_name, u.phone as owner_phone
       FROM courts c
       JOIN users u ON c.owner_id = u.id
       WHERE c.id = $1
@@ -128,7 +128,7 @@ const Court = {
   // Get all courts
   async getAll() {
     const query = `
-      SELECT c.*, u.name as owner_name
+      SELECT c.*, u.name as owner_name, u.phone as owner_phone
       FROM courts c
       JOIN users u ON c.owner_id = u.id
     `;
@@ -156,7 +156,7 @@ const Court = {
   // Get available courts
   async getAvailable() {
     const query = `
-      SELECT c.*, u.name as owner_name
+      SELECT c.*, u.name as owner_name, u.phone as owner_phone
       FROM courts c
       JOIN users u ON c.owner_id = u.id
       WHERE c.is_available = true
@@ -173,7 +173,7 @@ const Court = {
   // Search courts by name, location, or skill level
   async search(searchTerm) {
     const query = `
-      SELECT c.*, u.name as owner_name
+      SELECT c.*, u.name as owner_name, u.phone as owner_phone
       FROM courts c
       JOIN users u ON c.owner_id = u.id
       WHERE
@@ -186,6 +186,144 @@ const Court = {
       const result = await db.query(query, [`%${searchTerm}%`]);
       return result.rows;
     } catch (error) {
+      throw error;
+    }
+  },
+
+  /**
+   * Search courts with advanced filters
+   * @param {Object} params - Search parameters
+   * @param {string} params.query - Search query
+   * @param {string} params.date - Date to check availability (YYYY-MM-DD)
+   * @param {string} params.district - District/location
+   * @param {string} params.location - Location (alternative to district)
+   * @param {number} params.min_price - Minimum price
+   * @param {number} params.max_price - Maximum price
+   * @returns {Promise<Array>} - Array of court objects
+   */
+  async searchWithFilters(params) {
+    const {
+      query,
+      date,
+      district,
+      location,
+      min_price,
+      max_price
+    } = params;
+
+    // Start building the base query
+    let baseQuery = `
+      SELECT c.*, u.name as owner_name, u.phone as owner_phone
+      FROM courts c
+      JOIN users u ON c.owner_id = u.id
+      WHERE c.is_available = true
+    `;
+
+    const values = [];
+    let valueIndex = 1;
+
+    // Add search query filter if provided
+    if (query) {
+      baseQuery += ` AND (
+        c.name ILIKE $${valueIndex} OR
+        c.location ILIKE $${valueIndex} OR
+        c.description ILIKE $${valueIndex}
+      )`;
+      values.push(`%${query}%`);
+      valueIndex++;
+    }
+
+    // Add district/location filter if provided
+    if (district || location) {
+      const locationValue = district || location;
+
+      // Handle location search more intelligently
+      // Split location into words and search for each word
+      const locationWords = locationValue.split(/\s+/).filter(word => word.length > 1);
+
+      if (locationWords.length > 0) {
+        const locationConditions = locationWords.map((_, idx) =>
+          `c.location ILIKE $${valueIndex + idx}`
+        );
+
+        baseQuery += ` AND (${locationConditions.join(' AND ')})`;
+
+        locationWords.forEach(word => {
+          values.push(`%${word}%`);
+        });
+
+        valueIndex += locationWords.length;
+      } else {
+        // Fallback to simple search if no valid words
+        baseQuery += ` AND c.location ILIKE $${valueIndex}`;
+        values.push(`%${locationValue}%`);
+        valueIndex++;
+      }
+    }
+
+    // Add price range filters if provided
+    if (min_price !== undefined) {
+      baseQuery += ` AND c.hourly_rate >= $${valueIndex}`;
+      values.push(min_price);
+      valueIndex++;
+    }
+
+    if (max_price !== undefined) {
+      baseQuery += ` AND c.hourly_rate <= $${valueIndex}`;
+      values.push(max_price);
+      valueIndex++;
+    }
+
+    // If date is provided, filter courts by availability on that date
+    let finalQuery = baseQuery;
+    if (date) {
+      // Get the day of week from the date (0 = Sunday, 1 = Monday, etc.)
+      const dateObj = new Date(date);
+      const dayOfWeek = dateObj.getDay();
+
+      finalQuery = `
+        WITH available_courts AS (
+          ${baseQuery}
+        )
+        SELECT DISTINCT ac.*
+        FROM available_courts ac
+        JOIN court_timeslots ct ON ac.id = ct.court_id
+        LEFT JOIN bookings b ON ac.id = b.court_id
+          AND b.status != 'cancelled'
+          AND DATE(b.start_time) = $${valueIndex}
+        WHERE ct.day_of_week = $${valueIndex + 1}
+          AND ct.is_available = true
+          AND (b.id IS NULL OR (
+            -- Check if there are any timeslots not fully booked for this date
+            EXISTS (
+              SELECT 1 FROM court_timeslots ct2
+              WHERE ct2.court_id = ac.id
+              AND ct2.day_of_week = $${valueIndex + 1}
+              AND ct2.is_available = true
+              AND NOT EXISTS (
+                SELECT 1 FROM bookings b2
+                WHERE b2.court_id = ac.id
+                AND b2.status != 'cancelled'
+                AND DATE(b2.start_time) = $${valueIndex}
+                AND b2.start_time <= (DATE($${valueIndex}) + ct2.start_time::time)
+                AND b2.end_time >= (DATE($${valueIndex}) + ct2.end_time::time)
+              )
+            )
+          ))
+      `;
+
+      values.push(date, dayOfWeek);
+      valueIndex += 2;
+    }
+
+    // Add ordering
+    finalQuery += ` ORDER BY ${date ? 'ac' : 'c'}.created_at DESC`;
+
+    try {
+      const result = await db.query(finalQuery, values);
+      return result.rows;
+    } catch (error) {
+      console.error('Error in searchWithFilters:', error);
       throw error;
     }
   },
@@ -222,6 +360,7 @@ const Court = {
    * @param {string} filters.skill_level - Court skill level
    * @param {number} filters.owner_id - Owner ID
    * @param {boolean} filters.is_available - Is available
+   * @param {string} filters.date - Date to check availability (YYYY-MM-DD)
    * @param {number} filters.limit - Limit
    * @param {number} filters.offset - Offset
    * @returns {Promise<Array>} - Array of court objects
@@ -233,12 +372,13 @@ const Court = {
       skill_level,
       owner_id,
       is_available,
+      date,
       limit = 50,
       offset = 0
     } = filters;
 
     let query = `
-      SELECT c.*, u.name as owner_name
+      SELECT c.*, u.name as owner_name, u.phone as owner_phone
       FROM courts c
       JOIN users u ON c.owner_id = u.id
       WHERE 1=1
@@ -254,9 +394,28 @@ const Court = {
     }
 
     if (location) {
-      query += ` AND c.location ILIKE $${valueIndex}`;
-      values.push(`%${location}%`);
-      valueIndex++;
+      // Handle location search more intelligently
+      // Split location into words and search for each word
+      const locationWords = location.split(/\s+/).filter(word => word.length > 1);
+
+      if (locationWords.length > 0) {
+        const locationConditions = locationWords.map((_, idx) =>
+          `c.location ILIKE $${valueIndex + idx}`
+        );
+
+        query += ` AND (${locationConditions.join(' AND ')})`;
+
+        locationWords.forEach(word => {
+          values.push(`%${word}%`);
+        });
+
+        valueIndex += locationWords.length;
+      } else {
+        // Fallback to simple search if no valid words
+        query += ` AND c.location ILIKE $${valueIndex}`;
+        values.push(`%${location}%`);
+        valueIndex++;
+      }
     }
 
     if (skill_level) {
@@ -277,13 +436,56 @@ const Court = {
       valueIndex++;
     }
 
-    query += ` ORDER BY c.created_at DESC LIMIT $${valueIndex} OFFSET $${valueIndex + 1}`;
+    // If date is provided, filter courts by availability on that date
+    if (date) {
+      // Get the day of week from the date (0 = Sunday, 1 = Monday, etc.)
+      const dateObj = new Date(date);
+      const dayOfWeek = dateObj.getDay();
+
+      // Join with court_timeslots to check if there are available timeslots for this day
+      query = `
+        WITH available_courts AS (
+          ${query}
+        )
+        SELECT DISTINCT ac.*
+        FROM available_courts ac
+        JOIN court_timeslots ct ON ac.id = ct.court_id
+        LEFT JOIN bookings b ON ac.id = b.court_id
+          AND b.status != 'cancelled'
+          AND DATE(b.start_time) = $${valueIndex}
+        WHERE ct.day_of_week = $${valueIndex + 1}
+          AND ct.is_available = true
+          AND (b.id IS NULL OR (
+            -- Check if there are any timeslots not fully booked for this date
+            EXISTS (
+              SELECT 1 FROM court_timeslots ct2
+              WHERE ct2.court_id = ac.id
+              AND ct2.day_of_week = $${valueIndex + 1}
+              AND ct2.is_available = true
+              AND NOT EXISTS (
+                SELECT 1 FROM bookings b2
+                WHERE b2.court_id = ac.id
+                AND b2.status != 'cancelled'
+                AND DATE(b2.start_time) = $${valueIndex}
+                AND b2.start_time <= (DATE($${valueIndex}) + ct2.start_time::time)
+                AND b2.end_time >= (DATE($${valueIndex}) + ct2.end_time::time)
+              )
+            )
+          ))
+      `;
+
+      values.push(date, dayOfWeek);
+      valueIndex += 2;
+    }
+
+    query += ` ORDER BY ${date ? 'ac' : 'c'}.created_at DESC LIMIT $${valueIndex} OFFSET $${valueIndex + 1}`;
     values.push(limit, offset);
 
     try {
       const result = await db.query(query, values);
       return result.rows;
     } catch (error) {
+      console.error('Error in getByFilters:', error);
       throw error;
     }
   },

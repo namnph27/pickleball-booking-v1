@@ -8,6 +8,11 @@ const props = defineProps({
     type: Boolean,
     default: false
   },
+  // Thêm prop visible để tương thích với v-model:visible
+  visible: {
+    type: Boolean,
+    default: false
+  },
   title: {
     type: String,
     default: ''
@@ -28,6 +33,11 @@ const props = defineProps({
   hideFooter: {
     type: Boolean,
     default: false
+  },
+  // Thêm prop footer để tương thích với :footer="false"
+  footer: {
+    type: [Boolean, String],
+    default: true
   },
   okText: {
     type: String,
@@ -51,14 +61,15 @@ const props = defineProps({
   }
 });
 
-const emit = defineEmits(['update:modelValue', 'ok', 'cancel']);
+const emit = defineEmits(['update:modelValue', 'update:visible', 'ok', 'cancel']);
 
 const { t } = useI18n();
 
-const isOpen = ref(props.modelValue);
+// Sử dụng visible nếu được cung cấp, nếu không thì sử dụng modelValue
+const isOpen = ref(props.visible || props.modelValue);
 const modalRef = ref<HTMLElement | null>(null);
 
-// Sync with v-model
+// Sync với v-model
 watch(() => props.modelValue, (newValue) => {
   isOpen.value = newValue;
   if (newValue) {
@@ -68,8 +79,20 @@ watch(() => props.modelValue, (newValue) => {
   }
 });
 
+// Sync với v-model:visible
+watch(() => props.visible, (newValue) => {
+  isOpen.value = newValue;
+  if (newValue) {
+    document.body.style.overflow = 'hidden';
+  } else {
+    document.body.style.overflow = '';
+  }
+});
+
+// Emit cả hai sự kiện khi isOpen thay đổi
 watch(isOpen, (newValue) => {
   emit('update:modelValue', newValue);
+  emit('update:visible', newValue);
 });
 
 const modalClasses = computed(() => {
@@ -115,13 +138,13 @@ onUnmounted(() => {
 
 <template>
   <Teleport to="body">
-    <div 
-      v-if="isOpen" 
-      class="base-modal__backdrop" 
+    <div
+      v-if="isOpen"
+      class="base-modal__backdrop"
       @click="handleBackdropClick"
     >
-      <div 
-        ref="modalRef" 
+      <div
+        ref="modalRef"
         :class="modalClasses"
         role="dialog"
         aria-modal="true"
@@ -129,21 +152,21 @@ onUnmounted(() => {
         <div class="base-modal__header">
           <h3 v-if="title" class="base-modal__title">{{ title }}</h3>
           <slot name="header"></slot>
-          <button 
-            v-if="!hideClose" 
-            class="base-modal__close" 
+          <button
+            v-if="!hideClose"
+            class="base-modal__close"
             @click="handleCancel"
             :disabled="loading"
           >
             <i class="pi pi-times"></i>
           </button>
         </div>
-        
+
         <div class="base-modal__body">
           <slot></slot>
         </div>
-        
-        <div v-if="!hideFooter" class="base-modal__footer">
+
+        <div v-if="!hideFooter && footer !== false" class="base-modal__footer">
           <slot name="footer">
             <BaseButton
               :label="cancelText || t('common.cancel')"
@@ -179,7 +202,7 @@ onUnmounted(() => {
     z-index: 1000;
     padding: 1rem;
   }
-  
+
   &.base-modal {
     background-color: var(--white);
     border-radius: 8px;
@@ -191,24 +214,24 @@ onUnmounted(() => {
     transform: scale(0.9);
     transition: all 0.3s ease;
     width: 100%;
-    
+
     &--open {
       opacity: 1;
       transform: scale(1);
     }
-    
+
     &--small {
       max-width: 400px;
     }
-    
+
     &--medium {
       max-width: 600px;
     }
-    
+
     &--large {
       max-width: 800px;
     }
-    
+
     &--fullscreen {
       max-width: none;
       width: calc(100% - 2rem);
@@ -216,7 +239,7 @@ onUnmounted(() => {
       border-radius: 0;
     }
   }
-  
+
   &__header {
     display: flex;
     align-items: center;
@@ -224,14 +247,14 @@ onUnmounted(() => {
     border-bottom: 1px solid var(--light-gray);
     position: relative;
   }
-  
+
   &__title {
     font-size: 1.25rem;
     font-weight: 600;
     margin: 0;
     flex-grow: 1;
   }
-  
+
   &__close {
     background: none;
     border: none;
@@ -243,23 +266,23 @@ onUnmounted(() => {
     align-items: center;
     justify-content: center;
     transition: color 0.2s ease;
-    
+
     &:hover {
       color: var(--text-color);
     }
-    
+
     &:disabled {
       opacity: 0.5;
       cursor: not-allowed;
     }
   }
-  
+
   &__body {
     padding: 1.5rem;
     overflow-y: auto;
     flex-grow: 1;
   }
-  
+
   &__footer {
     display: flex;
     justify-content: flex-end;
@@ -278,15 +301,15 @@ onUnmounted(() => {
         max-width: calc(100% - 2rem);
       }
     }
-    
+
     &__header {
       padding: 1rem;
     }
-    
+
     &__body {
       padding: 1.25rem;
     }
-    
+
     &__footer {
       padding: 1rem;
     }

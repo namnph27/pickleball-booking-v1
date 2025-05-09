@@ -42,12 +42,12 @@ export function useAuth() {
   const updateProfile = async (profileData: any) => {
     try {
       const response = await post('/api/auth/profile', profileData);
-      
+
       // Update user in store
       if (response && response.user) {
         authStore.setUser(response.user);
       }
-      
+
       toast.success('Profile updated successfully');
       return true;
     } catch (error) {
@@ -55,13 +55,25 @@ export function useAuth() {
     }
   };
 
-  const changePassword = async (passwordData: { 
-    current_password: string; 
-    new_password: string; 
+  const changePassword = async (passwordData: {
+    current_password: string;
+    new_password: string;
   }) => {
     try {
       await post('/api/auth/change-password', passwordData);
       toast.success('Password changed successfully');
+      return true;
+    } catch (error) {
+      return false;
+    }
+  };
+
+  const deleteAccount = async () => {
+    try {
+      const { delete: deleteRequest } = useApi();
+      await deleteRequest('/api/auth/delete-account');
+      toast.success('Account deleted successfully');
+      authStore.logout();
       return true;
     } catch (error) {
       return false;
@@ -78,11 +90,11 @@ export function useAuth() {
     }
   };
 
-  const resetPassword = async (resetData: { 
-    token: string; 
-    email: string; 
-    password: string; 
-    password_confirmation: string 
+  const resetPassword = async (resetData: {
+    token: string;
+    email: string;
+    password: string;
+    password_confirmation: string
   }) => {
     try {
       await post('/api/auth/reset-password', resetData);
@@ -104,6 +116,7 @@ export function useAuth() {
     logout,
     updateProfile,
     changePassword,
+    deleteAccount,
     requestPasswordReset,
     resetPassword
   };

@@ -29,7 +29,20 @@ const emailInput = ref('');
 const passwordInput = ref('');
 
 // Redirect path after successful login
-const redirectPath = computed(() => route.query.redirect?.toString() || '/');
+const redirectPath = computed(() => {
+  // Nếu có redirect query parameter, sử dụng nó
+  if (route.query.redirect) {
+    return route.query.redirect.toString();
+  }
+
+  // Nếu không có redirect và user là chủ sân, điều hướng đến trang profile
+  if (authStore.user?.role === 'court_owner') {
+    return '/profile';
+  }
+
+  // Mặc định điều hướng đến trang chủ
+  return '/';
+});
 
 // Form validation
 const { handleSubmit, errors, resetForm } = useForm({
@@ -60,7 +73,13 @@ const onSubmit = handleSubmit(async () => {
     }
 
     toast.success(t('auth.loginSuccess'));
-    router.push(redirectPath.value);
+
+    // Kiểm tra vai trò người dùng sau khi đăng nhập
+    if (authStore.user?.role === 'court_owner') {
+      router.push('/profile');
+    } else {
+      router.push(redirectPath.value);
+    }
   } catch (error) {
     loginError.value = typeof error === 'string' ? error : t('auth.loginFailed');
   }
@@ -76,10 +95,16 @@ const verifyTwoFactor = async () => {
       return;
     }
 
-    await authStore.verify2FA(twoFactorCode.value);
+    const response = await authStore.verify2FA(twoFactorCode.value);
 
     toast.success(t('auth.loginSuccess'));
-    router.push(redirectPath.value);
+
+    // Kiểm tra vai trò người dùng sau khi xác thực 2FA
+    if (authStore.user?.role === 'court_owner') {
+      router.push('/profile');
+    } else {
+      router.push(redirectPath.value);
+    }
   } catch (error) {
     twoFactorError.value = typeof error === 'string' ? error : t('auth.verificationFailed');
   }

@@ -47,7 +47,9 @@ const containerClasses = computed(() => {
 });
 
 const pageTitle = computed(() => {
-  return props.title || route.meta.title || '';
+  const title = props.title || route.meta.title || '';
+  // Nếu title bắt đầu bằng một key i18n (ví dụ: 'joinCourt.title'), thì dịch nó
+  return title.includes('.') ? t(title) : title;
 });
 </script>
 

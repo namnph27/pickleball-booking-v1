@@ -3,6 +3,7 @@ import { ref, computed } from 'vue';
 import axios from 'axios';
 import router from '../router';
 import { useApi } from '../composables/useApi';
+import { useSocketService } from '../services/SocketService';
 
 export interface User {
   id: number;
@@ -190,6 +191,11 @@ export const useAuthStore = defineStore('auth', () => {
     // Remove axios default header
     delete axios.defaults.headers.common['Authorization'];
 
+    // Disconnect Socket.io
+    const socketService = useSocketService();
+    socketService.disconnectSocket();
+    socketService.cleanup();
+
     // Redirect to login page
     router.push('/login');
   }
@@ -220,6 +226,12 @@ export const useAuthStore = defineStore('auth', () => {
   function init() {
     if (token.value) {
       axios.defaults.headers.common['Authorization'] = `Bearer ${token.value}`;
+
+      // Initialize Socket.io connection
+      const socketService = useSocketService();
+      socketService.initializeSocket();
+      // Không cần gọi cleanup ở đây vì không có component lifecycle
+
       getProfile().catch(() => {
         // If getting profile fails, logout
         logout();

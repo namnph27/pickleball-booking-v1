@@ -8,6 +8,7 @@ export interface Court {
   hourly_rate: number;
   owner_id: number;
   owner_name?: string;
+  owner_phone?: string;
   skill_level: string;
   image_url: string;
   is_available: boolean;

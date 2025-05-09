@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router';
 import { useAuthStore } from '../store/auth';
 import { useAdminStore } from '../store/admin';
+import i18n from '../i18n';
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -9,7 +10,7 @@ const router = createRouter({
       path: '/',
       name: 'home',
       component: () => import('../views/HomePage.vue'),
-      meta: { title: 'Home' }
+      meta: { title: 'Home', restrictCourtOwner: true }
     },
     // Auth Routes
     {
@@ -35,6 +36,12 @@ const router = createRouter({
       name: 'reset-password',
       component: () => import('../views/auth/ResetPasswordPage.vue'),
       meta: { title: 'Reset Password', guest: true }
+    },
+    {
+      path: '/pending-approval',
+      name: 'pending-approval',
+      component: () => import('../views/auth/PendingApprovalPage.vue'),
+      meta: { title: 'Account Pending Approval' }
     },
     // Court Routes
     {
@@ -79,6 +86,25 @@ const router = createRouter({
       name: 'rewards',
       component: () => import('../views/user/RewardsPage.vue'),
       meta: { title: 'My Rewards', requiresAuth: true }
+    },
+    // Join Court Routes
+    {
+      path: '/join-court',
+      name: 'join-court',
+      component: () => import('../views/JoinCourtPage.vue'),
+      meta: { title: 'joinCourt.title', requiresAuth: true }
+    },
+    {
+      path: '/join-court/:id',
+      name: 'join-court-details',
+      component: () => import('../views/JoinCourtDetailPage.vue'),
+      meta: { title: 'joinCourt.courtDetails', requiresAuth: true }
+    },
+    {
+      path: '/join-requests',
+      name: 'join-requests',
+      component: () => import('../views/JoinRequestsPage.vue'),
+      meta: { title: 'joinRequests.title', requiresAuth: true }
     },
     // Court Owner Routes
     {
@@ -168,6 +194,12 @@ const router = createRouter({
       meta: { title: 'Manage Courts', requiresAdminAuth: true }
     },
     {
+      path: '/admin/court-owners',
+      name: 'admin-court-owners',
+      component: () => import('../views/admin/AdminCourtOwnersPage.vue'),
+      meta: { title: 'Manage Court Owners', requiresAdminAuth: true }
+    },
+    {
       path: '/admin/bookings',
       name: 'admin-bookings',
       component: () => import('../views/admin/AdminBookingsPage.vue'),
@@ -219,8 +251,10 @@ const router = createRouter({
 router.beforeEach((to, from, next) => {
   console.log(`Router guard: Navigating from ${from.path} to ${to.path}`);
 
-  // Set document title
-  document.title = `${to.meta.title || 'Pickleball Booking'} | Pickleball Court Booking`;
+  // Set document title with i18n support
+  const { t } = i18n.global;
+  const title = to.meta.title ? (String(to.meta.title).includes('.') ? t(String(to.meta.title)) : String(to.meta.title)) : 'Pickleball Booking';
+  document.title = `${title} | Pickleball Court Booking`;
 
   // Xử lý bfcache - Đặt một thuộc tính để đánh dấu rằng trang đã được xử lý bởi router
   // Điều này giúp giảm thiểu lỗi "Unchecked runtime.lastError" khi sử dụng back/forward cache
@@ -265,6 +299,13 @@ router.beforeEach((to, from, next) => {
   // Handle routes that require specific user role
   if (to.meta.role && isAuthenticated && user && user.role !== to.meta.role) {
     next({ name: 'forbidden' });
+    return;
+  }
+
+  // Handle routes that are restricted for court owners
+  if (to.meta.restrictCourtOwner && isAuthenticated && user && user.role === 'court_owner') {
+    console.log('Court owner attempting to access restricted route, redirecting to owner/courts');
+    next({ name: 'owner-courts' });
     return;
   }
 

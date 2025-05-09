@@ -11,6 +11,7 @@
     "update-payment-db": "node scripts/update-payment-db.js",
     "update-reward-db": "node scripts/update-reward-promotion-db.js",
     "update-admin-db": "node scripts/update-admin-features-db.js",
+    "update-join-court-db": "node scripts/update-join-court-feature.js",
     "create-admin": "node scripts/create-admin.js",
     "reset-admin": "node scripts/reset-admin-password.js",
     "test": "jest",
@@ -45,6 +46,7 @@
     "pdf-lib": "^1.17.1",
     "pg": "^8.15.6",
     "qrcode": "^1.5.4",
+    "socket.io": "^4.8.1",
     "speakeasy": "^2.0.0",
     "uuid": "^9.0.1"
   },

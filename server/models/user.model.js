@@ -1,24 +1,37 @@
 const db = require('../config/db.config');
 const bcrypt = require('bcrypt');
+const crypto = require('crypto');
 
 const User = {
   // Create a new user
   async create(userData) {
-    const { name, email, password, phone, role = 'customer' } = userData;
+    const { name, email, password, phone, role = 'customer', id_card, tax_code } = userData;
 
-    console.log('Creating user with data:', { name, email, phone, role });
+    console.log('Creating user with data:', { name, email, phone, role, id_card, tax_code });
 
     // Hash password
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
 
-    const query = `
-      INSERT INTO users (name, email, password, phone, role, created_at, updated_at)
-      VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
-      RETURNING id, name, email, phone, role, created_at
-    `;
+    let query, values;
 
-    const values = [name, email, hashedPassword, phone, role];
+    if (role === 'court_owner' && id_card && tax_code) {
+      // Chủ sân cần phê duyệt, mặc định là 'pending'
+      query = `
+        INSERT INTO users (name, email, password, phone, role, id_card, tax_code, approval_status, created_at, updated_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending', NOW(), NOW())
+        RETURNING id, name, email, phone, role, id_card, tax_code, approval_status, created_at
+      `;
+      values = [name, email, hashedPassword, phone, role, id_card, tax_code];
+    } else {
+      // Người chơi không cần phê duyệt
+      query = `
+        INSERT INTO users (name, email, password, phone, role, created_at, updated_at)
+        VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
+        RETURNING id, name, email, phone, role, created_at
+      `;
+      values = [name, email, hashedPassword, phone, role];
+    }
 
     try {
       console.log('Executing SQL query to create user');
@@ -503,6 +516,211 @@ const User = {
       const result = await db.query(query, [adminNotes, id]);
       return result.rows[0];
     } catch (error) {
+      throw error;
+    }
+  },
+
+  /**
+   * Update court owner approval status
+   * @param {number} id - User ID
+   * @param {string} approvalStatus - Approval status ('pending', 'approved', 'rejected')
+   * @param {string} adminNotes - Optional admin notes about the approval decision
+   * @returns {Promise<Object>} - Updated user
+   */
+  async updateApprovalStatus(id, approvalStatus, adminNotes = null) {
+    let query, values;
+
+    if (adminNotes) {
+      query = `
+        UPDATE users
+        SET approval_status = $1, admin_notes = $2, updated_at = NOW()
+        WHERE id = $3 AND role = 'court_owner'
+        RETURNING id, name, email, phone, role, approval_status, admin_notes, created_at, updated_at
+      `;
+      values = [approvalStatus, adminNotes, id];
+    } else {
+      query = `
+        UPDATE users
+        SET approval_status = $1, updated_at = NOW()
+        WHERE id = $2 AND role = 'court_owner'
+        RETURNING id, name, email, phone, role, approval_status, admin_notes, created_at, updated_at
+      `;
+      values = [approvalStatus, id];
+    }
+
+    try {
+      const result = await db.query(query, values);
+      return result.rows[0];
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  /**
+   * Get court owners by approval status
+   * @param {string} approvalStatus - Approval status ('pending', 'approved', 'rejected')
+   * @returns {Promise<Array>} - Array of court owner objects
+   */
+  async getCourtOwnersByApprovalStatus(approvalStatus) {
+    console.log(`Executing getCourtOwnersByApprovalStatus with status: ${approvalStatus}`);
+
+    try {
+      // Kiểm tra xem cột approval_status có tồn tại không
+      const checkColumnQuery = `
+        SELECT column_name
+        FROM information_schema.columns
+        WHERE table_name = 'users'
+        AND column_name = 'approval_status'
+      `;
+
+      const columnCheck = await db.query(checkColumnQuery);
+      console.log('Column check result:', columnCheck.rows);
+
+      if (columnCheck.rows.length === 0) {
+        console.error('approval_status column does not exist in users table');
+        // Trả về mảng rỗng nếu cột không tồn tại
+        return [];
+      }
+
+      // Kiểm tra xem có chủ sân nào không
+      const countQuery = `
+        SELECT COUNT(*) as count
+        FROM users
+        WHERE role = 'court_owner'
+      `;
+
+      const countResult = await db.query(countQuery);
+      console.log('Total court owners:', countResult.rows[0].count);
+
+      // Truy vấn chính
+      const query = `
+        SELECT id, name, email, phone, role, id_card, tax_code, approval_status, admin_notes, created_at, updated_at
+        FROM users
+        WHERE role = 'court_owner' AND approval_status = $1
+        ORDER BY created_at DESC
+      `;
+
+      const result = await db.query(query, [approvalStatus]);
+      console.log(`Found ${result.rows.length} court owners with status ${approvalStatus}`);
+      return result.rows;
+    } catch (error) {
+      console.error('Error in getCourtOwnersByApprovalStatus:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Create password reset token
+   * @param {string} email - User email
+   * @returns {Promise<Object>} - Object containing reset token and user
+   */
+  async createPasswordResetToken(email) {
+    try {
+      // Find user by email
+      const user = await this.findByEmail(email);
+      if (!user) {
+        return null;
+      }
+
+      // Generate reset token
+      const resetToken = crypto.randomBytes(32).toString('hex');
+
+      // Hash token
+      const hashedToken = crypto
+        .createHash('sha256')
+        .update(resetToken)
+        .digest('hex');
+
+      // Set token expiry (1 hour from now)
+      const tokenExpiry = new Date();
+      tokenExpiry.setHours(tokenExpiry.getHours() + 1);
+
+      // Save token to database
+      const query = `
+        UPDATE users
+        SET reset_password_token = $1, reset_password_expires = $2, updated_at = NOW()
+        WHERE id = $3
+        RETURNING id
+      `;
+
+      await db.query(query, [hashedToken, tokenExpiry, user.id]);
+
+      return {
+        resetToken,
+        user
+      };
+    } catch (error) {
+      console.error('Error creating password reset token:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Verify password reset token
+   * @param {string} token - Reset token
+   * @returns {Promise<Object|null>} - User object if token is valid, null otherwise
+   */
+  async verifyPasswordResetToken(token) {
+    try {
+      // Hash token
+      const hashedToken = crypto
+        .createHash('sha256')
+        .update(token)
+        .digest('hex');
+
+      // Find user with valid token
+      const query = `
+        SELECT *
+        FROM users
+        WHERE reset_password_token = $1
+        AND reset_password_expires > NOW()
+      `;
+
+      const result = await db.query(query, [hashedToken]);
+
+      if (result.rows.length === 0) {
+        return null;
+      }
+
+      return result.rows[0];
+    } catch (error) {
+      console.error('Error verifying password reset token:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Reset password with token
+   * @param {string} token - Reset token
+   * @param {string} newPassword - New password
+   * @returns {Promise<Object|null>} - User object if password was reset, null otherwise
+   */
+  async resetPasswordWithToken(token, newPassword) {
+    try {
+      // Verify token
+      const user = await this.verifyPasswordResetToken(token);
+
+      if (!user) {
+        return null;
+      }
+
+      // Hash new password
+      const salt = await bcrypt.genSalt(10);
+      const hashedPassword = await bcrypt.hash(newPassword, salt);
+
+      // Update password and clear reset token
+      const query = `
+        UPDATE users
+        SET password = $1, reset_password_token = NULL, reset_password_expires = NULL, updated_at = NOW()
+        WHERE id = $2
+        RETURNING id, email
+      `;
+
+      const result = await db.query(query, [hashedPassword, user.id]);
+
+      return result.rows[0];
+    } catch (error) {
+      console.error('Error resetting password with token:', error);
       throw error;
     }
   }

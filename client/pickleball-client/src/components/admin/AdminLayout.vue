@@ -72,6 +72,11 @@ onMounted(() => {
           <span v-if="!isSidebarCollapsed">Quản lý sân</span>
         </router-link>
 
+        <router-link to="/admin/court-owners" class="nav-item" :class="{ 'active': isActive('/admin/court-owners') }">
+          <i class="pi pi-building"></i>
+          <span v-if="!isSidebarCollapsed">Quản lý chủ sân</span>
+        </router-link>
+
         <router-link to="/admin/bookings" class="nav-item" :class="{ 'active': isActive('/admin/bookings') }">
           <i class="pi pi-calendar"></i>
           <span v-if="!isSidebarCollapsed">Quản lý đặt sân</span>

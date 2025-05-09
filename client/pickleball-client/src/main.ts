@@ -15,6 +15,7 @@ import i18n from './i18n'
 import { useAuthStore } from './store/auth'
 import { useAdminStore } from './store/admin'
 import { setupBFCacheHandlers } from './utils/bfcacheHandler'
+import { useSocketService } from './services/SocketService'
 
 // Make axios available globally for bfcache handler
 window.axios = axios
@@ -47,12 +48,25 @@ console.log('Admin store created, authenticated:', adminStore.isAuthenticated)
 adminStore.init()
 console.log('Admin store initialized')
 
-// Set admin token in axios headers if available
+// Không đặt admin token trong axios defaults để tránh xung đột
+// Thay vào đó, mỗi component sẽ đặt token trong từng request cụ thể
 const adminToken = localStorage.getItem('admin_token')
 if (adminToken) {
-  console.log('Setting admin token in axios defaults')
-  axios.defaults.headers.common['Authorization'] = `Bearer ${adminToken}`
+  console.log('Admin token exists, but not setting in axios defaults')
+  // Không đặt token trong axios.defaults.headers.common
 }
 
 // Setup BFCache handlers to prevent "Unchecked runtime.lastError" messages
 setupBFCacheHandlers()
+
+// Initialize Socket.io connection if user is authenticated
+// Không cần gọi cleanup ở đây vì không có component lifecycle
+if (authStore.isAuthenticated) {
+  try {
+    const socketService = useSocketService()
+    socketService.initializeSocket()
+    console.log('Socket.io service initialized')
+  } catch (error) {
+    console.error('Error initializing Socket.io service:', error)
+  }
+}

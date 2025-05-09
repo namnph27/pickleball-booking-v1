@@ -2,7 +2,7 @@
 import { ref, computed } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useI18n } from 'vue-i18n';
-import { useForm } from 'vee-validate';
+import { useForm, useField } from 'vee-validate';
 import { useAuthStore } from '../../store/auth';
 import { useValidation } from '../../composables/useValidation';
 import { useToast } from '../../composables/useToast';
@@ -27,7 +27,7 @@ const resetSuccess = ref(false);
 const token = computed(() => route.params.token?.toString() || '');
 
 // Form validation
-const { handleSubmit, errors, values } = useForm({
+const { handleSubmit, errors } = useForm({
   validationSchema: resetPasswordSchema,
   initialValues: {
     token: token.value,
@@ -35,6 +35,10 @@ const { handleSubmit, errors, values } = useForm({
     password_confirmation: ''
   }
 });
+
+// Use useField for form fields
+const { value: password } = useField('password');
+const { value: password_confirmation } = useField('password_confirmation');
 
 // Toggle password visibility
 const togglePasswordVisibility = () => {
@@ -49,16 +53,16 @@ const toggleConfirmPasswordVisibility = () => {
 const onSubmit = handleSubmit(async (formValues) => {
   try {
     resetError.value = '';
-    
+
     await authStore.resetPassword({
       token: token.value,
       password: formValues.password,
       password_confirmation: formValues.password_confirmation
     });
-    
+
     resetSuccess.value = true;
     toast.success(t('auth.passwordResetSuccess'));
-    
+
     // Redirect to login after a short delay
     setTimeout(() => {
       router.push('/login');
@@ -82,19 +86,19 @@ const goToLogin = () => {
           <h1 class="auth-title">{{ t('auth.resetPasswordTitle') }}</h1>
           <p class="auth-subtitle">{{ t('auth.resetPasswordDesc') }}</p>
         </div>
-        
+
         <div v-if="resetError" class="auth-error">
           <BaseAlert type="error" :message="resetError" />
         </div>
-        
+
         <div v-if="resetSuccess" class="auth-success">
           <BaseAlert type="success" :message="t('auth.passwordResetSuccess')" />
         </div>
-        
+
         <form v-if="!resetSuccess" @submit.prevent="onSubmit" class="auth-form">
           <div class="form-group">
             <BaseInput
-              v-model="values.password"
+              v-model="password"
               name="password"
               :type="showPassword ? 'text' : 'password'"
               :label="t('common.newPassword')"
@@ -103,18 +107,18 @@ const goToLogin = () => {
               required
               icon="pi-lock"
             />
-            <button 
-              type="button" 
-              class="password-toggle" 
+            <button
+              type="button"
+              class="password-toggle"
               @click="togglePasswordVisibility"
             >
               <i :class="`pi ${showPassword ? 'pi-eye-slash' : 'pi-eye'}`"></i>
             </button>
           </div>
-          
+
           <div class="form-group">
             <BaseInput
-              v-model="values.password_confirmation"
+              v-model="password_confirmation"
               name="password_confirmation"
               :type="showConfirmPassword ? 'text' : 'password'"
               :label="t('common.confirmPassword')"
@@ -123,19 +127,19 @@ const goToLogin = () => {
               required
               icon="pi-lock"
             />
-            <button 
-              type="button" 
-              class="password-toggle" 
+            <button
+              type="button"
+              class="password-toggle"
               @click="toggleConfirmPasswordVisibility"
             >
               <i :class="`pi ${showConfirmPassword ? 'pi-eye-slash' : 'pi-eye'}`"></i>
             </button>
           </div>
-          
+
           <div class="password-requirements">
             <p>{{ t('auth.passwordRequirements') }}</p>
           </div>
-          
+
           <div class="form-actions">
             <BaseButton
               type="submit"
@@ -146,7 +150,7 @@ const goToLogin = () => {
             />
           </div>
         </form>
-        
+
         <div v-else class="form-actions">
           <BaseButton
             :label="t('auth.backToLogin')"
@@ -155,7 +159,7 @@ const goToLogin = () => {
             @click="goToLogin"
           />
         </div>
-        
+
         <div class="auth-footer">
           <p>
             {{ t('auth.rememberPassword') }}
@@ -222,7 +226,7 @@ const goToLogin = () => {
   border: none;
   cursor: pointer;
   color: #666;
-  
+
   &:hover {
     color: var(--primary-color);
   }
@@ -247,12 +251,12 @@ const goToLogin = () => {
   margin-top: 1.5rem;
   text-align: center;
   font-size: 0.9rem;
-  
+
   a {
     color: var(--primary-color);
     font-weight: 600;
     text-decoration: none;
-    
+
     &:hover {
       text-decoration: underline;
     }
@@ -263,7 +267,7 @@ const goToLogin = () => {
   .auth-form-container {
     padding: 1.5rem;
   }
-  
+
   .auth-title {
     font-size: 1.5rem;
   }

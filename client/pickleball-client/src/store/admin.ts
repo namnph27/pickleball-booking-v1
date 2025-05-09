@@ -30,8 +30,8 @@ export const useAdminStore = defineStore('admin', () => {
       localStorage.setItem('admin_token', token.value);
       localStorage.setItem('admin', JSON.stringify(admin.value));
 
-      // Set axios default header
-      axios.defaults.headers.common['Authorization'] = `Bearer ${token.value}`;
+      // Không đặt token trong axios.defaults để tránh xung đột
+      // Thay vào đó, mỗi component sẽ đặt token trong từng request cụ thể
 
       // Không sử dụng toast ở đây, để component gọi login tự xử lý thông báo
       return response.data;
@@ -52,8 +52,7 @@ export const useAdminStore = defineStore('admin', () => {
     localStorage.removeItem('admin_token');
     localStorage.removeItem('admin');
 
-    // Remove axios default header
-    delete axios.defaults.headers.common['Authorization'];
+    // Không cần xóa token khỏi axios.defaults vì chúng ta không đặt nó ở đó
 
     // Redirect to admin login page
     router.push('/admin/login');
@@ -68,7 +67,12 @@ export const useAdminStore = defineStore('admin', () => {
     loading.value = true;
 
     try {
-      const response = await axios.get('/api/admin/auth/profile');
+      // Đặt token trong header của request cụ thể
+      const headers = {
+        'Authorization': `Bearer ${token.value}`
+      };
+
+      const response = await axios.get('/api/admin/auth/profile', { headers });
       admin.value = response.data.admin;
       localStorage.setItem('admin', JSON.stringify(admin.value));
       return response.data.admin;
@@ -90,7 +94,12 @@ export const useAdminStore = defineStore('admin', () => {
     error.value = '';
 
     try {
-      const response = await axios.post('/api/admin/auth/change-password', passwords);
+      // Đặt token trong header của request cụ thể
+      const headers = {
+        'Authorization': `Bearer ${token.value}`
+      };
+
+      const response = await axios.post('/api/admin/auth/change-password', passwords, { headers });
       return response.data;
     } catch (err: any) {
       error.value = err.response?.data?.message || 'Failed to change password';
@@ -111,7 +120,12 @@ export const useAdminStore = defineStore('admin', () => {
     error.value = '';
 
     try {
-      const response = await axios.post('/api/admin/auth/create', adminData);
+      // Đặt token trong header của request cụ thể
+      const headers = {
+        'Authorization': `Bearer ${token.value}`
+      };
+
+      const response = await axios.post('/api/admin/auth/create', adminData, { headers });
       return response.data;
     } catch (err: any) {
       error.value = err.response?.data?.message || 'Failed to create admin';
@@ -124,8 +138,10 @@ export const useAdminStore = defineStore('admin', () => {
   // Initialize admin state
   function init() {
     if (token.value) {
-      axios.defaults.headers.common['Authorization'] = `Bearer ${token.value}`;
+      // Không đặt token trong axios.defaults để tránh xung đột
+      // Thay vào đó, sẽ đặt token trong từng request cụ thể
 
+      // Gọi API với token trong header của request cụ thể
       getProfile().catch((err) => {
         console.error('Lỗi khi lấy thông tin profile:', err);
         // If getting profile fails, logout

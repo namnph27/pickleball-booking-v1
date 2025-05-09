@@ -17,15 +17,15 @@ const getCourtById = async (req, res) => {
   try {
     const { id } = req.params;
     const court = await Court.findById(id);
-    
+
     if (!court) {
       return res.status(404).json({ message: 'Court not found' });
     }
-    
+
     // Get timeslots for the court
     const timeslots = await CourtTimeslot.getByCourtId(id);
-    
-    res.status(200).json({ 
+
+    res.status(200).json({
       court,
       timeslots
     });
@@ -38,20 +38,20 @@ const getCourtById = async (req, res) => {
 // Create court (court owner only)
 const createCourt = async (req, res) => {
   try {
-    const { 
-      name, 
-      description, 
-      location, 
-      hourly_rate, 
-      skill_level, 
-      image_url 
+    const {
+      name,
+      description,
+      location,
+      hourly_rate,
+      skill_level,
+      image_url
     } = req.body;
-    
+
     // Validate required fields
     if (!name || !location || !hourly_rate) {
       return res.status(400).json({ message: 'Name, location, and hourly rate are required' });
     }
-    
+
     // Create court
     const newCourt = await Court.create({
       name,
@@ -63,7 +63,7 @@ const createCourt = async (req, res) => {
       image_url,
       is_available: true
     });
-    
+
     res.status(201).json({
       message: 'Court created successfully',
       court: newCourt
@@ -78,28 +78,28 @@ const createCourt = async (req, res) => {
 const updateCourt = async (req, res) => {
   try {
     const { id } = req.params;
-    const { 
-      name, 
-      description, 
-      location, 
-      hourly_rate, 
-      skill_level, 
-      image_url, 
-      is_available 
+    const {
+      name,
+      description,
+      location,
+      hourly_rate,
+      skill_level,
+      image_url,
+      is_available
     } = req.body;
-    
+
     // Check if court exists
     const court = await Court.findById(id);
-    
+
     if (!court) {
       return res.status(404).json({ message: 'Court not found' });
     }
-    
+
     // Check if user is the owner of the court
     if (court.owner_id !== req.user.id) {
       return res.status(403).json({ message: 'You are not authorized to update this court' });
     }
-    
+
     // Update court
     const updatedCourt = await Court.update(id, {
       name,
@@ -110,7 +110,7 @@ const updateCourt = async (req, res) => {
       image_url,
       is_available
     });
-    
+
     res.status(200).json({
       message: 'Court updated successfully',
       court: updatedCourt
@@ -125,22 +125,22 @@ const updateCourt = async (req, res) => {
 const deleteCourt = async (req, res) => {
   try {
     const { id } = req.params;
-    
+
     // Check if court exists
     const court = await Court.findById(id);
-    
+
     if (!court) {
       return res.status(404).json({ message: 'Court not found' });
     }
-    
+
     // Check if user is the owner of the court
     if (court.owner_id !== req.user.id) {
       return res.status(403).json({ message: 'You are not authorized to delete this court' });
     }
-    
+
     // Delete court
     await Court.delete(id);
-    
+
     res.status(200).json({ message: 'Court deleted successfully' });
   } catch (error) {
     console.error('Delete court error:', error);
@@ -151,23 +151,84 @@ const deleteCourt = async (req, res) => {
 // Search courts
 const searchCourts = async (req, res) => {
   try {
-    const { query, skill_level } = req.query;
-    
+    const {
+      query,
+      skill_level,
+      date,
+      district,
+      location,
+      min_price,
+      max_price,
+      price_range
+    } = req.query;
+
+    // Parse price range if provided
+    let parsedMinPrice = min_price;
+    let parsedMaxPrice = max_price;
+
+    if (price_range && !min_price && !max_price) {
+      if (price_range === '1000000+') {
+        parsedMinPrice = 1000000;
+      } else if (price_range.includes('-')) {
+        const [min, max] = price_range.split('-').map(Number);
+        parsedMinPrice = min;
+        parsedMaxPrice = max;
+      }
+    }
+
+    // If we have advanced filters (date, district, location, price), use the new searchWithFilters method
+    if (date || district || location || parsedMinPrice || parsedMaxPrice) {
+      // Prepare location parameter - district can be a code (quan_1) or a full location name
+      let locationParam = district;
+
+      // If district is a code like 'quan_1', we need to convert it to a location name
+      // This is a simple approach - in a real app, you might have a mapping table
+      if (district && district.startsWith('quan_')) {
+        // Extract district number and format it for search
+        const districtNumber = district.replace('quan_', '');
+        locationParam = `Quận ${districtNumber}`;
+      } else if (district && district.includes('_')) {
+        // Handle other district codes like 'binh_thanh', 'thu_duc', etc.
+        // Convert snake_case to title case for search
+        locationParam = district
+          .split('_')
+          .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+          .join(' ');
+      }
+
+      const courts = await Court.searchWithFilters({
+        query,
+        date,
+        district: locationParam,
+        location: location, // Pass the location parameter as well
+        min_price: parsedMinPrice ? Number(parsedMinPrice) : undefined,
+        max_price: parsedMaxPrice ? Number(parsedMaxPrice) : undefined
+      });
+
+      // Filter by skill level if provided
+      const filteredCourts = skill_level
+        ? courts.filter(court => court.skill_level === skill_level || court.skill_level === 'all')
+        : courts;
+
+      return res.status(200).json({ courts: filteredCourts });
+    }
+
+    // Otherwise, use the original search method
     let courts = [];
-    
+
     if (query) {
       courts = await Court.search(query);
     } else {
       courts = await Court.getAll();
     }
-    
+
     // Filter by skill level if provided
     if (skill_level) {
-      courts = courts.filter(court => 
+      courts = courts.filter(court =>
         court.skill_level === skill_level || court.skill_level === 'all'
       );
     }
-    
+
     res.status(200).json({ courts });
   } catch (error) {
     console.error('Search courts error:', error);

@@ -71,48 +71,63 @@ const availableLanguages = [
       <!-- Navigation Header -->
       <header class="navbar">
         <div class="navbar-brand">
-          <router-link to="/" class="logo">
+          <!-- Logo cho người chơi và khách - có thể click để về trang chủ -->
+          <router-link v-if="!isAuthenticated || !isCourtOwner" to="/" class="logo">
             <img src="/images/pz-logo.png" alt="PZ Logo" class="logo-image" />
             <span class="logo-text">Pickleball Zone</span>
           </router-link>
+
+          <!-- Logo cho chủ sân - không thể click để về trang chủ -->
+          <div v-else class="logo">
+            <img src="/images/pz-logo.png" alt="PZ Logo" class="logo-image" />
+            <span class="logo-text">Pickleball Zone</span>
+          </div>
+
           <button class="mobile-menu-toggle" @click="toggleMobileMenu">
             <i :class="isMobileMenuOpen ? 'pi pi-times' : 'pi pi-bars'"></i>
           </button>
         </div>
 
         <nav class="navbar-menu" :class="{ 'navbar-menu--open': isMobileMenuOpen }">
-          <router-link to="/" class="navbar-item" @click="isMobileMenuOpen = false">{{ t('common.home') }}</router-link>
-          <router-link to="/courts" class="navbar-item" @click="isMobileMenuOpen = false">{{ t('common.courts') }}</router-link>
+          <!-- Hiển thị các liên kết khác nhau dựa trên vai trò người dùng -->
 
-          <!-- Guest Links -->
+          <!-- Liên kết cho khách (chưa đăng nhập) -->
           <template v-if="!isAuthenticated">
+            <router-link to="/" class="navbar-item" @click="isMobileMenuOpen = false">{{ t('common.home') }}</router-link>
+            <router-link to="/courts" class="navbar-item" @click="isMobileMenuOpen = false">{{ t('common.courts') }}</router-link>
             <router-link to="/login" class="navbar-item" @click="isMobileMenuOpen = false">{{ t('common.login') }}</router-link>
             <router-link to="/register" class="navbar-item" @click="isMobileMenuOpen = false">{{ t('common.register') }}</router-link>
           </template>
 
-          <!-- Authenticated User Links -->
-          <template v-else>
+          <!-- Liên kết cho người chơi đã đăng nhập -->
+          <template v-else-if="!isCourtOwner">
+            <router-link to="/" class="navbar-item" @click="isMobileMenuOpen = false">{{ t('common.home') }}</router-link>
+            <router-link to="/courts" class="navbar-item" @click="isMobileMenuOpen = false">{{ t('common.courts') }}</router-link>
+            <router-link to="/join-court" class="navbar-item" @click="isMobileMenuOpen = false">{{ t('joinCourt.joinCourt') }}</router-link>
             <router-link to="/bookings" class="navbar-item" @click="isMobileMenuOpen = false">{{ t('booking.myBookings') }}</router-link>
-
-            <!-- Court Owner Links -->
-            <template v-if="isCourtOwner">
-              <router-link to="/owner/courts" class="navbar-item" @click="isMobileMenuOpen = false">{{ t('courtOwner.myCourts') }}</router-link>
-            </template>
-
-            <!-- User Dropdown -->
-            <div class="user-dropdown">
-              <button class="dropdown-trigger" @click="toggleUserDropdown">
-                {{ user?.name }}
-                <i class="pi" :class="isUserDropdownOpen ? 'pi-chevron-up' : 'pi-chevron-down'"></i>
-              </button>
-              <div class="dropdown-menu" :class="{ 'dropdown-menu--open': isUserDropdownOpen }">
-                <router-link to="/profile" class="dropdown-item" @click="isUserDropdownOpen = false; isMobileMenuOpen = false">{{ t('common.profile') }}</router-link>
-                <router-link to="/rewards" class="dropdown-item" @click="isUserDropdownOpen = false; isMobileMenuOpen = false">{{ t('rewards.myRewards') }}</router-link>
-                <div class="dropdown-divider"></div>
-                <button @click="logout" class="dropdown-item">{{ t('common.logout') }}</button>
-              </div>
-            </div>
+            <router-link to="/join-requests" class="navbar-item" @click="isMobileMenuOpen = false">{{ t('joinRequests.menuTitle') }}</router-link>
           </template>
+
+          <!-- Liên kết cho chủ sân đã đăng nhập -->
+          <template v-else>
+            <router-link to="/owner/courts" class="navbar-item" @click="isMobileMenuOpen = false">{{ t('courtOwner.myCourts') }}</router-link>
+            <router-link to="/owner/analytics" class="navbar-item" @click="isMobileMenuOpen = false">{{ t('courtOwner.analytics') }}</router-link>
+          </template>
+
+          <!-- User Dropdown -->
+          <div v-if="isAuthenticated" class="user-dropdown">
+            <button class="dropdown-trigger" @click="toggleUserDropdown">
+              {{ user?.name }}
+              <i class="pi" :class="isUserDropdownOpen ? 'pi-chevron-up' : 'pi-chevron-down'"></i>
+            </button>
+            <div class="dropdown-menu" :class="{ 'dropdown-menu--open': isUserDropdownOpen }">
+              <router-link to="/profile" class="dropdown-item" @click="isUserDropdownOpen = false; isMobileMenuOpen = false">{{ t('common.profile') }}</router-link>
+              <!-- Chỉ hiển thị liên kết Điểm thưởng cho người chơi, không hiển thị cho chủ sân -->
+              <router-link v-if="!isCourtOwner" to="/rewards" class="dropdown-item" @click="isUserDropdownOpen = false; isMobileMenuOpen = false">{{ t('rewards.myRewards') }}</router-link>
+              <div class="dropdown-divider"></div>
+              <button @click="logout" class="dropdown-item">{{ t('common.logout') }}</button>
+            </div>
+          </div>
 
           <!-- Language Selector -->
           <div class="language-selector">
@@ -141,11 +156,12 @@ const availableLanguages = [
         <router-view />
       </main>
 
-      <!-- Footer -->
-      <footer class="footer">
+      <!-- Footer - Chỉ hiển thị khi không phải là chủ sân đăng nhập -->
+      <footer v-if="!isAuthenticated || !isCourtOwner" class="footer">
         <div class="footer-container">
           <div class="footer-top">
             <div class="footer-logo">
+              <!-- Logo trong footer chỉ hiển thị cho khách và người chơi, không hiển thị cho chủ sân -->
               <router-link to="/" class="logo">
                 <img src="/images/pz-logo.png" alt="PZ Logo" class="logo-image" />
               </router-link>

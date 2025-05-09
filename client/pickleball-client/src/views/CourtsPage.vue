@@ -9,6 +9,7 @@ import BaseButton from '../components/base/BaseButton.vue';
 import BaseInput from '../components/base/BaseInput.vue';
 import BaseSelect from '../components/base/BaseSelect.vue';
 import BaseSpinner from '../components/base/BaseSpinner.vue';
+import BaseAlert from '../components/base/BaseAlert.vue';
 
 const { t } = useI18n();
 const route = useRoute();
@@ -17,7 +18,7 @@ const courtStore = useCourtStore();
 
 // Search and filter state
 const selectedDistrict = ref(route.query.district?.toString() || '');
-const selectedTimeSlot = ref(route.query.time_slot?.toString() || '');
+const selectedDate = ref(route.query.date?.toString() || '');
 const selectedPriceRange = ref(route.query.price_range?.toString() || '');
 
 // Pagination
@@ -51,14 +52,14 @@ const districtOptions = computed(() => [
   { value: 'hoc_mon', label: 'Huyện Hóc Môn' }
 ]);
 
-// Danh sách các buổi trong ngày
-const timeSlotOptions = computed(() => [
-  { value: '', label: 'Tất cả các buổi' },
-  { value: 'sang', label: 'Buổi sáng (6:00 - 12:00)' },
-  { value: 'trua', label: 'Buổi trưa (12:00 - 14:00)' },
-  { value: 'chieu', label: 'Buổi chiều (14:00 - 18:00)' },
-  { value: 'toi', label: 'Buổi tối (18:00 - 22:00)' }
-]);
+// Lấy ngày hiện tại theo định dạng YYYY-MM-DD
+const getCurrentDate = () => {
+  const today = new Date();
+  const year = today.getFullYear();
+  const month = String(today.getMonth() + 1).padStart(2, '0');
+  const day = String(today.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
 
 // Danh sách các khoảng giá
 const priceRangeOptions = computed(() => [
@@ -99,7 +100,7 @@ const searchCourts = async () => {
 
   const params = {
     district: selectedDistrict.value,
-    time_slot: selectedTimeSlot.value,
+    date: selectedDate.value,
     price_range: selectedPriceRange.value,
     min_price: minPrice,
     max_price: maxPrice,
@@ -122,7 +123,7 @@ const searchCourts = async () => {
 
 const resetFilters = () => {
   selectedDistrict.value = '';
-  selectedTimeSlot.value = '';
+  selectedDate.value = '';
   selectedPriceRange.value = '';
 
   // Clear URL query params
@@ -147,7 +148,7 @@ const changePage = (page: number) => {
 // Watch for route query changes
 watch(() => route.query, (newQuery) => {
   selectedDistrict.value = newQuery.district?.toString() || '';
-  selectedTimeSlot.value = newQuery.time_slot?.toString() || '';
+  selectedDate.value = newQuery.date?.toString() || '';
   selectedPriceRange.value = newQuery.price_range?.toString() || '';
 }, { immediate: true });
 
@@ -161,6 +162,26 @@ const animateOnScroll = () => {
       element.classList.add('animate__animated', 'animate__fadeInUp');
     }
   });
+};
+
+// Format phone number to more readable format (e.g., 0912 345 678)
+const formatPhoneNumber = (phone) => {
+  if (!phone) return '';
+
+  // Remove any non-digit characters
+  const cleaned = phone.replace(/\D/g, '');
+
+  // Format based on length
+  if (cleaned.length === 10) {
+    // For 10-digit numbers (most Vietnamese numbers)
+    return `${cleaned.slice(0, 4)} ${cleaned.slice(4, 7)} ${cleaned.slice(7)}`;
+  } else if (cleaned.length === 11) {
+    // For 11-digit numbers
+    return `${cleaned.slice(0, 4)} ${cleaned.slice(4, 7)} ${cleaned.slice(7)}`;
+  } else {
+    // For other lengths, just add spaces every 3 digits
+    return cleaned.replace(/(\d{4})(\d{3})(\d+)/, '$1 $2 $3');
+  }
 };
 
 // Fetch courts on mount
@@ -199,7 +220,7 @@ onBeforeUnmount(() => {
       <div class="filters-container">
         <div class="filter-header">
           <h2 class="filter-title">Tìm kiếm sân phù hợp</h2>
-          <p class="filter-subtitle">Lọc theo địa điểm, thời gian và mức giá</p>
+          <p class="filter-subtitle">Lọc theo địa điểm, ngày và mức giá</p>
         </div>
 
         <div class="filter-groups">
@@ -219,14 +240,15 @@ onBeforeUnmount(() => {
 
           <div class="filter-group">
             <div class="filter-icon">
-              <i class="pi pi-clock"></i>
+              <i class="pi pi-calendar"></i>
             </div>
             <div class="filter-content">
-              <label class="filter-label">Thời gian</label>
-              <BaseSelect
-                v-model="selectedTimeSlot"
-                :options="timeSlotOptions"
-                :placeholder="'Chọn buổi trong ngày'"
+              <label class="filter-label">Ngày</label>
+              <BaseInput
+                v-model="selectedDate"
+                type="date"
+                :placeholder="'Chọn ngày'"
+                :min="getCurrentDate()"
               />
             </div>
           </div>
@@ -274,9 +296,9 @@ onBeforeUnmount(() => {
           <i class="pi pi-map-marker"></i>
           {{ districtOptions.find(d => d.value === selectedDistrict)?.label || 'Tất cả các quận' }}
         </template>
-        <template v-if="selectedTimeSlot">
-          <i class="pi pi-clock"></i>
-          {{ timeSlotOptions.find(t => t.value === selectedTimeSlot)?.label || 'Tất cả các buổi' }}
+        <template v-if="selectedDate">
+          <i class="pi pi-calendar"></i>
+          {{ new Date(selectedDate).toLocaleDateString('vi-VN', { year: 'numeric', month: 'long', day: 'numeric' }) }}
         </template>
         <template v-if="selectedPriceRange">
           <i class="pi pi-dollar"></i>
@@ -305,10 +327,10 @@ onBeforeUnmount(() => {
             {{ districtOptions.find(d => d.value === selectedDistrict)?.label }}
             <i class="pi pi-times" @click="selectedDistrict = ''; searchCourts()"></i>
           </div>
-          <div v-if="selectedTimeSlot" class="filter-tag">
-            <i class="pi pi-clock"></i>
-            {{ timeSlotOptions.find(t => t.value === selectedTimeSlot)?.label }}
-            <i class="pi pi-times" @click="selectedTimeSlot = ''; searchCourts()"></i>
+          <div v-if="selectedDate" class="filter-tag">
+            <i class="pi pi-calendar"></i>
+            {{ new Date(selectedDate).toLocaleDateString('vi-VN', { year: 'numeric', month: 'long', day: 'numeric' }) }}
+            <i class="pi pi-times" @click="selectedDate = ''; searchCourts()"></i>
           </div>
           <div v-if="selectedPriceRange" class="filter-tag">
             <i class="pi pi-dollar"></i>
@@ -342,44 +364,62 @@ onBeforeUnmount(() => {
             >
               <template #header>
                 <div class="court-header">
-                  <h3 class="court-name">{{ court.name }}</h3>
-                  <div class="court-location">
-                    <i class="pi pi-map-marker location-icon"></i> {{ court.location }}
+                  <div class="court-header-content">
+                    <h3 class="court-name">{{ court.name }}</h3>
+                    <div class="court-location">
+                      <i class="pi pi-map-marker location-icon"></i> {{ court.location }}
+                    </div>
+                  </div>
+                  <div class="court-price">
+                    <span class="price-value">{{ court.hourly_rate.toLocaleString() }} VNĐ</span>
+                    <span class="price-unit">/giờ</span>
                   </div>
                 </div>
               </template>
 
-              <div class="court-details">
-                <div class="court-info">
-                  <div class="info-item">
-                    <i class="pi pi-users info-icon"></i>
-                    <div>
-                      <span class="info-label">Trình độ:</span>
-                      <span class="info-value">{{ t(`common.${court.skill_level}`) }}</span>
-                    </div>
-                  </div>
-
-                  <div v-if="court.owner_name" class="info-item">
-                    <i class="pi pi-user info-icon"></i>
-                    <div>
-                      <span class="info-label">Chủ sân:</span>
-                      <span class="info-value">{{ court.owner_name }}</span>
-                    </div>
-                  </div>
+              <div class="court-content">
+                <div v-if="court.description" class="court-description">
+                  <i class="pi pi-info-circle description-icon"></i>
+                  <p>
+                    {{ court.description.length > 120
+                      ? court.description.substring(0, 120) + '...'
+                      : court.description
+                    }}
+                  </p>
                 </div>
 
-                <div class="court-price">
-                  <span class="price-value">{{ court.hourly_rate.toLocaleString() }} VNĐ</span>
-                  <span class="price-unit">/giờ</span>
+                <div class="court-contact-info">
+                  <div class="contact-header">
+                    <i class="pi pi-id-card contact-header-icon"></i>
+                    <h4>Thông tin liên hệ</h4>
+                  </div>
+
+                  <div class="contact-details">
+                    <div v-if="court.owner_name" class="contact-item">
+                      <i class="pi pi-user contact-icon"></i>
+                      <div>
+                        <span class="contact-label">Chủ sân</span>
+                        <span class="contact-value">{{ court.owner_name }}</span>
+                      </div>
+                    </div>
+
+                    <div class="contact-item">
+                      <i class="pi pi-phone contact-icon"></i>
+                      <div>
+                        <span class="contact-label">Điện thoại</span>
+                        <a
+                          v-if="court.owner_phone"
+                          :href="`tel:${court.owner_phone}`"
+                          class="contact-value phone-link"
+                        >
+                          {{ formatPhoneNumber(court.owner_phone) }}
+                        </a>
+                        <span v-else class="contact-value text-muted">Chưa cập nhật</span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
-
-              <p v-if="court.description" class="court-description">
-                {{ court.description.length > 100
-                  ? court.description.substring(0, 100) + '...'
-                  : court.description
-                }}
-              </p>
 
               <template #footer>
                 <div class="card-actions">
@@ -721,14 +761,24 @@ onBeforeUnmount(() => {
   overflow: hidden;
   box-shadow: 0 8px 20px rgba(0, 0, 0, 0.08);
   transition: all 0.3s ease;
+  background-color: #ffffff;
 
   &:hover {
     box-shadow: 0 12px 30px rgba(0, 0, 0, 0.12);
+    transform: translateY(-5px);
   }
 
   .court-header {
     padding: 1.25rem;
     background-color: white;
+    border-bottom: 1px solid rgba(10, 35, 66, 0.05);
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+  }
+
+  .court-header-content {
+    flex: 1;
   }
 
   .court-name {
@@ -736,6 +786,10 @@ onBeforeUnmount(() => {
     font-weight: 700;
     margin-bottom: 0.5rem;
     color: var(--primary-color);
+    display: -webkit-box;
+    -webkit-line-clamp: 1;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
   }
 
   .court-location {
@@ -744,88 +798,186 @@ onBeforeUnmount(() => {
     display: flex;
     align-items: center;
     gap: 0.5rem;
+    margin-top: 0.25rem;
 
     .location-icon {
       color: #ff6b6b;
     }
   }
 
-  .court-details {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    margin-bottom: 1.5rem;
-    padding: 0 1rem;
+  .court-price {
+    background: linear-gradient(135deg, var(--primary-color) 0%, #1e90ff 100%);
+    padding: 0.75rem 1rem;
+    border-radius: 12px;
+    text-align: center;
+    box-shadow: 0 4px 8px rgba(10, 35, 66, 0.1);
+    position: relative;
+    overflow: hidden;
+    min-width: 120px;
+    margin-left: 1rem;
 
-    .court-info {
-      display: flex;
-      flex-direction: column;
-      gap: 0.75rem;
+    &::before {
+      content: '';
+      position: absolute;
+      top: -10px;
+      right: -10px;
+      width: 40px;
+      height: 40px;
+      background-color: rgba(255, 255, 255, 0.1);
+      border-radius: 50%;
     }
 
-    .info-item {
+    .price-value {
+      display: block;
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: white;
+      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+    }
+
+    .price-unit {
+      font-size: 0.75rem;
+      color: rgba(255, 255, 255, 0.8);
+    }
+  }
+
+  .court-content {
+    padding: 1.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+
+  .court-description {
+    display: flex;
+    gap: 1rem;
+    background-color: rgba(245, 247, 250, 0.7);
+    padding: 1rem;
+    border-radius: 10px;
+    position: relative;
+
+    .description-icon {
+      color: var(--primary-color);
+      font-size: 1.25rem;
+      flex-shrink: 0;
+      margin-top: 0.25rem;
+    }
+
+    p {
+      font-size: 0.9rem;
+      color: var(--dark-gray);
+      line-height: 1.6;
+      margin: 0;
+    }
+  }
+
+  .court-contact-info {
+    background-color: rgba(245, 247, 250, 0.5);
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
+
+    .contact-header {
+      background-color: rgba(30, 144, 255, 0.1);
+      padding: 0.75rem 1rem;
       display: flex;
       align-items: center;
       gap: 0.75rem;
 
-      .info-icon {
+      .contact-header-icon {
+        color: var(--primary-color);
+        font-size: 1.1rem;
+      }
+
+      h4 {
+        margin: 0;
+        font-size: 1rem;
+        font-weight: 600;
+        color: var(--primary-color);
+      }
+    }
+
+    .contact-details {
+      padding: 1rem;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1rem;
+    }
+
+    .contact-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.75rem;
+      padding: 0.5rem;
+      border-radius: 8px;
+      transition: all 0.2s ease;
+
+      &:hover {
+        background-color: rgba(255, 255, 255, 0.7);
+        transform: translateY(-2px);
+      }
+
+      .contact-icon {
         color: var(--primary-color);
         font-size: 1rem;
+        width: 32px;
+        height: 32px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background-color: rgba(30, 144, 255, 0.1);
+        border-radius: 50%;
+        padding: 0.5rem;
+        flex-shrink: 0;
       }
 
-      .info-label {
-        font-size: 0.875rem;
+      div {
+        display: flex;
+        flex-direction: column;
+        gap: 0.25rem;
+      }
+
+      .contact-label {
+        font-size: 0.8rem;
         color: var(--dark-gray);
-        margin-right: 0.25rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
       }
 
-      .info-value {
+      .contact-value {
         font-weight: 600;
         color: var(--text-color);
+        font-size: 0.95rem;
+        word-break: break-word;
+      }
+
+      .phone-link {
+        color: var(--primary-color);
+        text-decoration: none;
+        transition: all 0.2s ease;
+        display: inline-flex;
+        align-items: center;
+
+        &:hover {
+          color: #0056b3;
+          text-decoration: underline;
+        }
+
+        &::after {
+          content: '\e93b'; /* PrimeIcons phone icon */
+          font-family: 'primeicons';
+          font-size: 0.8rem;
+          margin-left: 0.5rem;
+          opacity: 0.7;
+        }
+      }
+
+      .text-muted {
+        color: var(--dark-gray);
+        font-style: italic;
+        font-weight: normal;
       }
     }
-
-    .court-price {
-      background: linear-gradient(135deg, var(--primary-color) 0%, #1e90ff 100%);
-      padding: 0.75rem 1.25rem;
-      border-radius: 12px;
-      text-align: center;
-      box-shadow: 0 4px 8px rgba(10, 35, 66, 0.1);
-      position: relative;
-      overflow: hidden;
-
-      &::before {
-        content: '';
-        position: absolute;
-        top: -10px;
-        right: -10px;
-        width: 40px;
-        height: 40px;
-        background-color: rgba(255, 255, 255, 0.1);
-        border-radius: 50%;
-      }
-
-      .price-value {
-        display: block;
-        font-size: 1.25rem;
-        font-weight: 700;
-        color: white;
-        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
-      }
-
-      .price-unit {
-        font-size: 0.75rem;
-        color: rgba(255, 255, 255, 0.8);
-      }
-    }
-  }
-
-  .court-description {
-    font-size: 0.875rem;
-    color: var(--dark-gray);
-    margin-bottom: 1.5rem;
-    line-height: 1.6;
-    padding: 0 1rem;
   }
 
   .card-actions {
@@ -837,6 +989,26 @@ onBeforeUnmount(() => {
 
     :deep(.base-button) {
       flex: 1;
+      border-radius: 8px;
+      transition: all 0.3s ease;
+
+      &.primary {
+        background: linear-gradient(135deg, var(--primary-color) 0%, #1e90ff 100%);
+        box-shadow: 0 4px 8px rgba(10, 35, 66, 0.1);
+
+        &:hover {
+          transform: translateY(-2px);
+          box-shadow: 0 6px 12px rgba(10, 35, 66, 0.15);
+        }
+      }
+
+      &.outline {
+        border: 1px solid rgba(30, 144, 255, 0.5);
+
+        &:hover {
+          background-color: rgba(30, 144, 255, 0.05);
+        }
+      }
     }
   }
 }
@@ -1100,13 +1272,19 @@ onBeforeUnmount(() => {
   }
 
   .court-card {
-    .court-details {
+    .court-header {
       flex-direction: column;
-      gap: 1.5rem;
-      align-items: flex-start;
 
       .court-price {
-        align-self: flex-start;
+        margin-left: 0;
+        margin-top: 1rem;
+        width: 100%;
+      }
+    }
+
+    .court-contact-info {
+      .contact-details {
+        grid-template-columns: 1fr;
       }
     }
 

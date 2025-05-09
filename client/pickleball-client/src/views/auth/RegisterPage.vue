@@ -26,16 +26,27 @@ const qrCodeUrl = ref('');
 const twoFactorCode = ref('');
 const twoFactorError = ref('');
 
+// Create local refs for form fields
+const nameInput = ref('');
+const emailInput = ref('');
+const phoneInput = ref('');
+const idCardInput = ref('');
+const taxCodeInput = ref('');
+const passwordInput = ref('');
+const passwordConfirmationInput = ref('');
+
 // Redirect path after successful registration
 const redirectPath = computed(() => route.query.redirect?.toString() || '/');
 
 // Form validation
-const { handleSubmit, errors, values, setFieldValue } = useForm({
+const { handleSubmit, errors, setFieldValue } = useForm({
   validationSchema: registerSchema,
   initialValues: {
     name: '',
     email: '',
     phone: '',
+    id_card: '',
+    tax_code: '',
     password: '',
     password_confirmation: '',
     role: 'customer'
@@ -56,8 +67,37 @@ watch(userRole, (newRole) => {
   setFieldValue('role', newRole);
 });
 
+// Sync form fields with vee-validate
+watch(nameInput, (newValue) => {
+  setFieldValue('name', newValue);
+});
+
+watch(emailInput, (newValue) => {
+  setFieldValue('email', newValue);
+});
+
+watch(phoneInput, (newValue) => {
+  setFieldValue('phone', newValue);
+});
+
+watch(idCardInput, (newValue) => {
+  setFieldValue('id_card', newValue);
+});
+
+watch(taxCodeInput, (newValue) => {
+  setFieldValue('tax_code', newValue);
+});
+
+watch(passwordInput, (newValue) => {
+  setFieldValue('password', newValue);
+});
+
+watch(passwordConfirmationInput, (newValue) => {
+  setFieldValue('password_confirmation', newValue);
+});
+
 // Handle form submission
-const onSubmit = handleSubmit(async (formValues) => {
+const onSubmit = handleSubmit(async () => {
   try {
     registrationError.value = '';
 
@@ -69,15 +109,32 @@ const onSubmit = handleSubmit(async (formValues) => {
     }
 
     const userData = {
-      ...formValues,
+      name: nameInput.value,
+      email: emailInput.value,
+      phone: phoneInput.value,
+      password: passwordInput.value,
+      password_confirmation: passwordConfirmationInput.value,
       role: userRole.value
     };
+
+    // Thêm thông tin CCCD và mã số thuế nếu là chủ sân
+    if (userRole.value === 'court_owner') {
+      userData.id_card = idCardInput.value;
+      userData.tax_code = taxCodeInput.value;
+    }
 
     console.log('Submitting registration data:', userData);
 
     // Kiểm tra dữ liệu trước khi gửi
     if (!userData.name || !userData.email || !userData.password || !userData.password_confirmation || !userData.phone) {
       console.error('Missing required fields');
+      registrationError.value = t('auth.allFieldsRequired');
+      return;
+    }
+
+    // Kiểm tra thông tin bắt buộc cho chủ sân
+    if (userData.role === 'court_owner' && (!userData.id_card || !userData.tax_code)) {
+      console.error('Missing required fields for court owner');
       registrationError.value = t('auth.allFieldsRequired');
       return;
     }
@@ -100,8 +157,15 @@ const onSubmit = handleSubmit(async (formValues) => {
       return;
     }
 
-    toast.success(t('auth.registrationSuccess'));
-    router.push(redirectPath.value);
+    // Hiển thị thông báo phù hợp dựa trên vai trò
+    if (userRole.value === 'court_owner') {
+      toast.success(t('auth.courtOwnerRegistrationSuccess'));
+      // Chuyển đến trang thông báo đang chờ phê duyệt
+      router.push('/pending-approval');
+    } else {
+      toast.success(t('auth.registrationSuccess'));
+      router.push(redirectPath.value);
+    }
   } catch (error) {
     console.error('Registration error:', error);
     registrationError.value = typeof error === 'string' ? error : t('auth.registrationFailed');
@@ -176,7 +240,7 @@ const goToLogin = () => {
         <form @submit.prevent="onSubmit" class="auth-form">
           <div class="form-group">
             <BaseInput
-              v-model="values.name"
+              v-model="nameInput"
               name="name"
               :label="t('common.name')"
               :placeholder="t('auth.namePlaceholder')"
@@ -188,7 +252,7 @@ const goToLogin = () => {
 
           <div class="form-group">
             <BaseInput
-              v-model="values.email"
+              v-model="emailInput"
               name="email"
               type="email"
               :label="t('common.email')"
@@ -201,7 +265,7 @@ const goToLogin = () => {
 
           <div class="form-group">
             <BaseInput
-              v-model="values.phone"
+              v-model="phoneInput"
               name="phone"
               :label="t('common.phone')"
               :placeholder="t('auth.phonePlaceholder')"
@@ -211,9 +275,40 @@ const goToLogin = () => {
             />
           </div>
 
+          <!-- Thông tin bắt buộc cho chủ sân -->
+          <template v-if="userRole === 'court_owner'">
+            <div class="court-owner-notice">
+              <BaseAlert type="info" :message="t('auth.courtOwnerApprovalNotice')" />
+            </div>
+
+            <div class="form-group">
+              <BaseInput
+                v-model="idCardInput"
+                name="id_card"
+                :label="t('auth.idCard')"
+                :placeholder="t('auth.idCardPlaceholder')"
+                :error="errors.id_card"
+                required
+                icon="pi-id-card"
+              />
+            </div>
+
+            <div class="form-group">
+              <BaseInput
+                v-model="taxCodeInput"
+                name="tax_code"
+                :label="t('auth.taxCode')"
+                :placeholder="t('auth.taxCodePlaceholder')"
+                :error="errors.tax_code"
+                required
+                icon="pi-file"
+              />
+            </div>
+          </template>
+
           <div class="form-group">
             <BaseInput
-              v-model="values.password"
+              v-model="passwordInput"
               name="password"
               :type="showPassword ? 'text' : 'password'"
               :label="t('common.password')"
@@ -233,7 +328,7 @@ const goToLogin = () => {
 
           <div class="form-group">
             <BaseInput
-              v-model="values.password_confirmation"
+              v-model="passwordConfirmationInput"
               name="password_confirmation"
               :type="showConfirmPassword ? 'text' : 'password'"
               :label="t('common.confirmPassword')"
@@ -353,6 +448,10 @@ const goToLogin = () => {
 }
 
 .auth-error {
+  margin-bottom: 1.5rem;
+}
+
+.court-owner-notice {
   margin-bottom: 1.5rem;
 }
 

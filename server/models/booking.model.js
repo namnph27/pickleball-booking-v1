@@ -20,7 +20,11 @@ const Booking = {
       start_time,
       end_time,
       total_price,
-      status = 'pending'
+      status = 'pending',
+      skill_level = null,
+      current_players = 1,
+      needed_players = 3,
+      allow_join = false
     } = bookingData;
 
     const query = `
@@ -31,10 +35,14 @@ const Booking = {
         end_time,
         total_price,
         status,
+        skill_level,
+        current_players,
+        needed_players,
+        allow_join,
         created_at,
         updated_at
       )
-      VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW())
       RETURNING *
     `;
 
@@ -44,7 +52,11 @@ const Booking = {
       start_time,
       end_time,
       total_price,
-      status
+      status,
+      skill_level,
+      current_players,
+      needed_players,
+      allow_join
     ];
 
     try {
@@ -83,28 +95,68 @@ const Booking = {
       start_time,
       end_time,
       total_price,
-      status
+      status,
+      skill_level,
+      current_players,
+      needed_players,
+      allow_join
     } = bookingData;
 
-    const query = `
-      UPDATE bookings
-      SET
-        start_time = $1,
-        end_time = $2,
-        total_price = $3,
-        status = $4,
-        updated_at = NOW()
-      WHERE id = $5
-      RETURNING *
-    `;
+    // Build dynamic update query based on provided fields
+    let query = 'UPDATE bookings SET updated_at = NOW()';
+    const values = [];
+    let valueIndex = 1;
 
-    const values = [
-      start_time,
-      end_time,
-      total_price,
-      status,
-      id
-    ];
+    if (start_time !== undefined) {
+      query += `, start_time = $${valueIndex}`;
+      values.push(start_time);
+      valueIndex++;
+    }
+
+    if (end_time !== undefined) {
+      query += `, end_time = $${valueIndex}`;
+      values.push(end_time);
+      valueIndex++;
+    }
+
+    if (total_price !== undefined) {
+      query += `, total_price = $${valueIndex}`;
+      values.push(total_price);
+      valueIndex++;
+    }
+
+    if (status !== undefined) {
+      query += `, status = $${valueIndex}`;
+      values.push(status);
+      valueIndex++;
+    }
+
+    if (skill_level !== undefined) {
+      query += `, skill_level = $${valueIndex}`;
+      values.push(skill_level);
+      valueIndex++;
+    }
+
+    if (current_players !== undefined) {
+      query += `, current_players = $${valueIndex}`;
+      values.push(current_players);
+      valueIndex++;
+    }
+
+    if (needed_players !== undefined) {
+      query += `, needed_players = $${valueIndex}`;
+      values.push(needed_players);
+      valueIndex++;
+    }
+
+    if (allow_join !== undefined) {
+      query += `, allow_join = $${valueIndex}`;
+      values.push(allow_join);
+      valueIndex++;
+    }
+
+    query += ` WHERE id = $${valueIndex} RETURNING *`;
+    values.push(id);
 
     try {
       const result = await db.query(query, values);
@@ -223,7 +275,11 @@ const Booking = {
       start_time,
       end_time,
       total_price,
-      status = 'pending'
+      status = 'pending',
+      skill_level = null,
+      current_players = 1,
+      needed_players = 3,
+      allow_join = false
     } = bookingData;
 
     // Start a transaction
@@ -272,7 +328,11 @@ const Booking = {
         start_time,
         end_time,
         total_price,
-        status
+        status,
+        skill_level,
+        current_players,
+        needed_players,
+        allow_join
       }, client);
 
       await client.query('COMMIT');
@@ -502,6 +562,145 @@ const Booking = {
 
     try {
       const result = await db.query(query, [adminNotes, id]);
+      return result.rows[0];
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  /**
+   * Find joinable courts with filters
+   * @param {Object} filters - Filters
+   * @param {string} filters.date - Date (YYYY-MM-DD)
+   * @param {string} filters.skill_level - Skill level
+   * @param {string} filters.location - Location
+   * @param {number} filters.min_price - Minimum price
+   * @param {number} filters.max_price - Maximum price
+   * @param {number} filters.players_needed - Number of players needed
+   * @param {number} filters.limit - Limit
+   * @param {number} filters.offset - Offset
+   * @returns {Promise<Array>} - Array of joinable bookings
+   */
+  async findJoinable(filters) {
+    const {
+      date,
+      skill_level,
+      location,
+      min_price,
+      max_price,
+      players_needed,
+      limit = 50,
+      offset = 0
+    } = filters;
+
+    let query = `
+      SELECT b.*, c.name as court_name, c.location, c.image_url, c.hourly_rate,
+             u.name as user_name, u.phone as user_phone,
+             (b.needed_players - b.current_players) as spots_available
+      FROM bookings b
+      JOIN courts c ON b.court_id = c.id
+      JOIN users u ON b.user_id = u.id
+      WHERE b.allow_join = true
+        AND b.status = 'confirmed'
+        AND b.start_time > NOW()
+        AND b.current_players < b.needed_players
+    `;
+
+    const values = [];
+    let valueIndex = 1;
+
+    // Filter by date
+    if (date) {
+      query += ` AND DATE(b.start_time) = $${valueIndex}`;
+      values.push(date);
+      valueIndex++;
+    }
+
+    // Filter by skill level
+    if (skill_level) {
+      query += ` AND (b.skill_level = $${valueIndex} OR b.skill_level IS NULL)`;
+      values.push(skill_level);
+      valueIndex++;
+    }
+
+    // Filter by location
+    if (location) {
+      query += ` AND c.location ILIKE $${valueIndex}`;
+      values.push(`%${location}%`);
+      valueIndex++;
+    }
+
+    // Filter by price range
+    if (min_price !== undefined) {
+      query += ` AND c.hourly_rate >= $${valueIndex}`;
+      values.push(min_price);
+      valueIndex++;
+    }
+
+    if (max_price !== undefined) {
+      query += ` AND c.hourly_rate <= $${valueIndex}`;
+      values.push(max_price);
+      valueIndex++;
+    }
+
+    // Filter by players needed
+    if (players_needed !== undefined) {
+      query += ` AND (b.needed_players - b.current_players) >= $${valueIndex}`;
+      values.push(players_needed);
+      valueIndex++;
+    }
+
+    // Order by start time
+    query += ` ORDER BY b.start_time ASC LIMIT $${valueIndex} OFFSET $${valueIndex + 1}`;
+    values.push(limit, offset);
+
+    try {
+      const result = await db.query(query, values);
+      return result.rows;
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  /**
+   * Update allow_join status
+   * @param {number} id - Booking ID
+   * @param {boolean} allowJoin - Allow join status
+   * @returns {Promise<Object>} - Updated booking
+   */
+  async updateAllowJoin(id, allowJoin) {
+    const query = `
+      UPDATE bookings
+      SET allow_join = $1, updated_at = NOW()
+      WHERE id = $2
+      RETURNING *
+    `;
+
+    try {
+      const result = await db.query(query, [allowJoin, id]);
+      return result.rows[0];
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  /**
+   * Update player counts
+   * @param {number} id - Booking ID
+   * @param {number} currentPlayers - Current players count
+   * @param {number} neededPlayers - Needed players count
+   * @returns {Promise<Object>} - Updated booking
+   */
+  async updatePlayerCounts(id, currentPlayers, neededPlayers) {
+    const query = `
+      UPDATE bookings
+      SET current_players = $1, needed_players = $2, updated_at = NOW()
+      WHERE id = $3
+      RETURNING *
+    `;
+
+    try {
+      const result = await db.query(query, [currentPlayers, neededPlayers, id]);
       return result.rows[0];
     } catch (error) {
       throw error;

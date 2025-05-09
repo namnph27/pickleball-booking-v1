@@ -3,13 +3,19 @@ const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
 const dotenv = require('dotenv');
+const http = require('http');
+const socketService = require('./services/socket.service');
 
 // Load environment variables
 dotenv.config();
 
 // Initialize Express app
 const app = express();
+const server = http.createServer(app);
 const PORT = process.env.PORT || 5000;
+
+// Initialize Socket.io
+socketService.initialize(server);
 
 // Middleware
 app.use(cors());
@@ -27,6 +33,7 @@ app.get('/', (req, res) => {
 app.use('/api/auth', require('./routes/auth.routes'));
 app.use('/api/courts', require('./routes/court.routes'));
 app.use('/api/bookings', require('./routes/booking.routes'));
+app.use('/api/bookings/join', require('./routes/booking.join.routes'));
 app.use('/api/promotions', require('./routes/promotion.routes'));
 app.use('/api/rewards', require('./routes/reward.routes'));
 app.use('/api/payments', require('./routes/payment.routes'));
@@ -37,6 +44,7 @@ app.use('/api/admin/auth', require('./routes/admin.auth.routes'));
 app.use('/api/admin/dashboard', require('./routes/admin.dashboard.routes'));
 app.use('/api/admin/users', require('./routes/admin.user.routes'));
 app.use('/api/admin/courts', require('./routes/admin.court.routes'));
+app.use('/api/admin/court-owners', require('./routes/admin.court-owner.routes'));
 app.use('/api/admin/bookings', require('./routes/admin.booking.routes'));
 app.use('/api/admin/promotions', require('./routes/admin.promotion.routes'));
 app.use('/api/admin/notifications', require('./routes/admin.notification.routes'));
@@ -54,8 +62,9 @@ app.use((err, req, res, next) => {
 });
 
 // Start server
-app.listen(PORT, () => {
+server.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
+  console.log(`Socket.io server is running`);
 });
 
 module.exports = app;

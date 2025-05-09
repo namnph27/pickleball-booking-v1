@@ -25,6 +25,12 @@ export function useValidation() {
     .required(t('auth.requiredField'))
     .matches(/^[0-9+\-\s()]{8,15}$/, t('auth.invalidPhone'));
 
+  const idCard = yup.string()
+    .matches(/^[0-9]{9,12}$/, t('auth.invalidIdCard'));
+
+  const taxCode = yup.string()
+    .matches(/^[0-9]{10,13}$/, t('auth.invalidTaxCode'));
+
   // Schema builders
   const loginSchema = yup.object({
     email: email,
@@ -37,7 +43,17 @@ export function useValidation() {
     password: password,
     password_confirmation: confirmPassword('password'),
     phone: phone,
-    role: yup.string().required(t('auth.requiredField'))
+    role: yup.string().required(t('auth.requiredField')),
+    id_card: yup.string().when('role', {
+      is: 'court_owner',
+      then: () => idCard.required(t('auth.requiredField')),
+      otherwise: () => idCard
+    }),
+    tax_code: yup.string().when('role', {
+      is: 'court_owner',
+      then: () => taxCode.required(t('auth.requiredField')),
+      otherwise: () => taxCode
+    })
   });
 
   const profileSchema = yup.object({
@@ -89,6 +105,8 @@ export function useValidation() {
     confirmPassword,
     name,
     phone,
+    idCard,
+    taxCode,
 
     // Schema builders
     loginSchema,

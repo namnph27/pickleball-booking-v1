@@ -50,11 +50,8 @@ export const useCourtStore = defineStore('court', () => {
       filtered = filtered.filter(court => court.hourly_rate <= (searchParams.value.max_price || Infinity));
     }
 
-    // Filter by time slot (this would require backend support for proper implementation)
-    if (searchParams.value.time_slot) {
-      // Giả lập lọc theo thời gian - trong thực tế cần triển khai ở backend
-      // Hiện tại chỉ giữ nguyên danh sách để demo UI
-    }
+    // Filter by date is now handled by the backend
+    // The backend will return courts that are available on the selected date
 
     return filtered;
   });

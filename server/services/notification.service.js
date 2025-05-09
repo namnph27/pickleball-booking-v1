@@ -1,4 +1,5 @@
 const Notification = require('../models/notification.model');
+const socketService = require('./socket.service');
 
 /**
  * Notification Service
@@ -18,7 +19,13 @@ class NotificationService {
    */
   async sendNotification(notificationData) {
     try {
-      return await Notification.create(notificationData);
+      // Create notification in database
+      const notification = await Notification.create(notificationData);
+
+      // Send real-time notification via Socket.io
+      socketService.sendNotificationToUser(notificationData.user_id, notification);
+
+      return notification;
     } catch (error) {
       console.error('Error sending notification:', error);
       throw error;
@@ -306,6 +313,79 @@ class NotificationService {
       });
     } catch (error) {
       console.error('Error sending new reward notification:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Send a join request notification
+   * @param {number} userId - User ID (booking owner)
+   * @param {Object} joinRequest - Join request object
+   * @param {Object} requester - User who sent the request
+   * @returns {Promise<Object>} Created notification
+   */
+  async sendJoinRequestNotification(userId, joinRequest, requester) {
+    try {
+      const notification = await this.sendNotification({
+        user_id: userId,
+        title: 'Yêu cầu tham gia sân',
+        message: `${requester.name} muốn tham gia sân của bạn với ${joinRequest.players_count} người chơi.`,
+        type: 'join_request',
+        related_id: joinRequest.id,
+        related_type: 'booking_join_request'
+      });
+
+      // Send real-time notification via Socket.io
+      socketService.sendJoinRequestNotification(userId, {
+        ...joinRequest,
+        requester_name: requester.name
+      });
+
+      return notification;
+    } catch (error) {
+      console.error('Error sending join request notification:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Send a join request response notification
+   * @param {number} userId - User ID (requester)
+   * @param {Object} joinRequest - Join request object
+   * @param {string} status - Response status ('approved' or 'rejected')
+   * @param {Object} booking - Booking object
+   * @returns {Promise<Object>} Created notification
+   */
+  async sendJoinRequestResponseNotification(userId, joinRequest, status, booking) {
+    try {
+      const title = status === 'approved'
+        ? 'Yêu cầu tham gia được chấp nhận'
+        : 'Yêu cầu tham gia bị từ chối';
+
+      const message = status === 'approved'
+        ? `Yêu cầu tham gia sân ${booking.court_name} của bạn đã được chấp nhận.`
+        : `Yêu cầu tham gia sân ${booking.court_name} của bạn đã bị từ chối.`;
+
+      const notification = await this.sendNotification({
+        user_id: userId,
+        title,
+        message,
+        type: 'join_request_response',
+        related_id: joinRequest.id,
+        related_type: 'booking_join_request'
+      });
+
+      // Send real-time notification via Socket.io
+      socketService.sendJoinRequestResponseNotification(userId, {
+        join_request_id: joinRequest.id,
+        status,
+        booking_id: booking.id,
+        court_name: booking.court_name
+      });
+
+      return notification;
+    } catch (error) {
+      console.error('Error sending join request response notification:', error);
       return null;
     }
   }

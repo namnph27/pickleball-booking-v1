@@ -2,7 +2,7 @@
 import { ref } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useI18n } from 'vue-i18n';
-import { useForm } from 'vee-validate';
+import { useForm, useField } from 'vee-validate';
 import { useAuthStore } from '../../store/auth';
 import { useValidation } from '../../composables/useValidation';
 import { useToast } from '../../composables/useToast';
@@ -23,19 +23,22 @@ const resetSuccess = ref(false);
 const resetMessage = ref('');
 
 // Form validation
-const { handleSubmit, errors, values } = useForm({
+const { handleSubmit, errors } = useForm({
   validationSchema: forgotPasswordSchema
 });
+
+// Use useField for email
+const { value: email } = useField('email');
 
 // Handle form submission
 const onSubmit = handleSubmit(async (formValues) => {
   try {
     resetError.value = '';
     resetSuccess.value = false;
-    
+
     // Call API to send password reset email
     await authStore.forgotPassword(formValues.email);
-    
+
     resetSuccess.value = true;
     resetMessage.value = t('auth.resetLinkSent');
     toast.success(t('auth.resetLinkSent'));
@@ -61,19 +64,19 @@ const goToLogin = () => {
           <h1 class="auth-title">{{ t('auth.forgotPasswordTitle') }}</h1>
           <p class="auth-subtitle">{{ t('auth.forgotPasswordDesc') }}</p>
         </div>
-        
+
         <div v-if="resetError" class="auth-error">
           <BaseAlert type="error" :message="resetError" />
         </div>
-        
+
         <div v-if="resetSuccess" class="auth-success">
           <BaseAlert type="success" :message="resetMessage" />
         </div>
-        
+
         <form v-if="!resetSuccess" @submit.prevent="onSubmit" class="auth-form">
           <div class="form-group">
             <BaseInput
-              v-model="values.email"
+              v-model="email"
               name="email"
               type="email"
               :label="t('common.email')"
@@ -83,7 +86,7 @@ const goToLogin = () => {
               icon="pi-envelope"
             />
           </div>
-          
+
           <div class="form-actions">
             <BaseButton
               type="submit"
@@ -94,7 +97,7 @@ const goToLogin = () => {
             />
           </div>
         </form>
-        
+
         <div v-else class="form-actions">
           <BaseButton
             :label="t('auth.backToLogin')"
@@ -103,7 +106,7 @@ const goToLogin = () => {
             @click="goToLogin"
           />
         </div>
-        
+
         <div class="auth-footer">
           <p>
             {{ t('auth.rememberPassword') }}
@@ -174,12 +177,12 @@ const goToLogin = () => {
   margin-top: 1.5rem;
   text-align: center;
   font-size: 0.9rem;
-  
+
   a {
     color: var(--primary-color);
     font-weight: 600;
     text-decoration: none;
-    
+
     &:hover {
       text-decoration: underline;
     }
@@ -190,7 +193,7 @@ const goToLogin = () => {
   .auth-form-container {
     padding: 1.5rem;
   }
-  
+
   .auth-title {
     font-size: 1.5rem;
   }

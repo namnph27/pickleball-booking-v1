@@ -62,6 +62,10 @@ export interface Booking {
   end_time: string;
   total_price: number;
   status: 'pending' | 'confirmed' | 'cancelled' | 'completed';
+  skill_level?: string;
+  current_players?: number;
+  needed_players?: number;
+  allow_join?: boolean;
   created_at: string;
   updated_at?: string;
 }
@@ -70,6 +74,45 @@ export interface BookingFormData {
   court_id: number;
   start_time: string;
   end_time: string;
+  skill_level?: string;
+  current_players?: number;
+  needed_players?: number;
+  allow_join?: boolean;
+}
+
+// Join Court types
+export interface JoinableBooking extends Booking {
+  location?: string;
+  image_url?: string;
+  hourly_rate?: number;
+  user_phone?: string;
+  spots_available?: number;
+}
+
+export interface BookingJoinRequest {
+  id: number;
+  booking_id: number;
+  user_id: number;
+  user_name?: string;
+  user_email?: string;
+  user_phone?: string;
+  players_count: number;
+  message?: string;
+  status: 'pending' | 'approved' | 'rejected';
+  created_at: string;
+  updated_at: string;
+}
+
+export interface BookingPlayer {
+  id: number;
+  booking_id: number;
+  user_id: number;
+  name?: string;
+  email?: string;
+  phone?: string;
+  is_booker: boolean;
+  players_count: number;
+  created_at: string;
 }
 
 // Payment types
@@ -104,5 +147,8 @@ export interface Notification {
   title: string;
   message: string;
   is_read: boolean;
+  type?: string;
+  related_id?: number;
+  related_type?: string;
   created_at: string;
 }

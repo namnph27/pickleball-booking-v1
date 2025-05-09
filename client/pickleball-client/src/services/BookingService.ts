@@ -8,6 +8,10 @@ export interface Booking {
   end_time: string;
   total_price: number;
   status: 'pending' | 'confirmed' | 'cancelled' | 'completed';
+  skill_level?: string;
+  current_players?: number;
+  needed_players?: number;
+  allow_join?: boolean;
   created_at: string;
   updated_at?: string;
   court_name?: string;
@@ -21,6 +25,10 @@ export interface BookingRequest {
   start_time: string;
   end_time: string;
   promotion_code?: string;
+  skill_level?: string;
+  current_players?: number;
+  needed_players?: number;
+  allow_join?: boolean;
 }
 
 export interface Payment {
@@ -38,7 +46,7 @@ export function useBookingService() {
 
   // Booking endpoints
   const createBooking = (bookingData: BookingRequest) => {
-    return post<{ 
+    return post<{
       booking: Booking;
       discount_amount: number;
       applied_promotion: { code: string; discount_percent: number } | null;

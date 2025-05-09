@@ -162,6 +162,11 @@ onMounted(() => {
               <span>Quản lý sân</span>
             </router-link>
 
+            <router-link to="/admin/court-owners" class="action-button">
+              <i class="pi pi-building"></i>
+              <span>Quản lý chủ sân</span>
+            </router-link>
+
             <router-link to="/admin/bookings" class="action-button">
               <i class="pi pi-calendar"></i>
               <span>Quản lý đặt sân</span>
