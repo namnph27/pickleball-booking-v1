@@ -7,7 +7,7 @@ import { useToast } from './useToast';
 export function useAuth() {
   const authStore = useAuthStore();
   const router = useRouter();
-  const { post } = useApi();
+  const { post, delete: deleteRequest } = useApi();
   const toast = useToast();
 
   const isAuthenticated = computed(() => authStore.isAuthenticated);
@@ -70,12 +70,15 @@ export function useAuth() {
 
   const deleteAccount = async () => {
     try {
-      const { delete: deleteRequest } = useApi();
-      await deleteRequest('/api/auth/delete-account');
-      toast.success('Account deleted successfully');
+      const response = await deleteRequest('/api/auth/delete-account');
+      toast.success(response?.message || 'Account deleted successfully');
       authStore.logout();
       return true;
-    } catch (error) {
+    } catch (error: any) {
+      console.error('Error deleting account:', error);
+      // Trả về lỗi chi tiết để hiển thị cho người dùng
+      const errorMessage = error?.response?.data?.message || 'Failed to delete account';
+      toast.error(errorMessage);
       return false;
     }
   };

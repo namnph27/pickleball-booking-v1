@@ -114,10 +114,34 @@ export const useCourtStore = defineStore('court', () => {
     error.value = null;
 
     try {
+      console.log('Getting court by ID in store:', id);
       const response = await courtService.getCourtById(id);
+      console.log('API response:', response);
+
+      if (!response || !response.court) {
+        console.error('Court not found in API response');
+        throw new Error('Court not found');
+      }
+
+      console.log('Court data received in store:', response.court);
+
+      // Make sure all required fields are present
+      if (!response.court.name || !response.court.location || !response.court.district) {
+        console.warn('Court data is missing required fields:', response.court);
+      }
+
+      // Set the current court
       currentCourt.value = response.court;
+
+      // Also store timeslots if they are returned
+      if (response.timeslots) {
+        console.log('Timeslots received:', response.timeslots.length);
+        courtTimeslots.value = response.timeslots;
+      }
+
       return response.court;
     } catch (err: any) {
+      console.error('Error getting court by ID:', err);
       error.value = typeof err === 'string' ? err : 'Failed to fetch court details';
       throw error.value;
     } finally {
@@ -180,21 +204,42 @@ export const useCourtStore = defineStore('court', () => {
     error.value = null;
 
     try {
+      console.log('Updating court with ID:', id);
+      console.log('Court data to update:', courtData);
+
+      // Make sure we have all required fields
+      if (!courtData.name || !courtData.location || !courtData.district) {
+        console.error('Missing required fields for court update');
+        throw new Error('Missing required fields: name, location, and district are required');
+      }
+
       const response = await courtService.updateCourt(id, courtData);
+      console.log('Court update response:', response);
+
+      if (!response || !response.court) {
+        console.error('No court data returned from update API');
+        throw new Error('Failed to update court: No court data returned');
+      }
 
       // Update the court in the courts array
       const index = courts.value.findIndex(c => c.id === id);
       if (index !== -1) {
+        console.log('Updating court in courts array at index:', index);
         courts.value[index] = response.court;
+      } else {
+        console.log('Court not found in courts array, adding it');
+        courts.value.push(response.court);
       }
 
       // Update currentCourt if it's the same court
       if (currentCourt.value && currentCourt.value.id === id) {
+        console.log('Updating currentCourt with new data');
         currentCourt.value = response.court;
       }
 
       return response.court;
     } catch (err: any) {
+      console.error('Error updating court:', err);
       error.value = typeof err === 'string' ? err : 'Failed to update court';
       throw error.value;
     } finally {

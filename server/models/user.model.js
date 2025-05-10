@@ -91,13 +91,62 @@ const User = {
 
   // Delete user
   async delete(id) {
-    const query = 'DELETE FROM users WHERE id = $1 RETURNING *';
+    // Sử dụng transaction để đảm bảo tính nhất quán
+    const client = await db.pool.connect();
 
     try {
-      const result = await db.query(query, [id]);
+      await client.query('BEGIN');
+
+      // Kiểm tra xem người dùng có tồn tại không
+      const checkUserQuery = 'SELECT role FROM users WHERE id = $1';
+      const userResult = await client.query(checkUserQuery, [id]);
+
+      if (userResult.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return null;
+      }
+
+      const userRole = userResult.rows[0].role;
+
+      // Nếu là chủ sân, xóa các bản ghi liên quan trước
+      if (userRole === 'court_owner') {
+        console.log(`Deleting court owner (ID: ${id}) with cascading delete...`);
+
+        // Xóa các bản ghi trong booking_players liên quan đến các booking của sân thuộc chủ sân
+        const deleteBookingPlayersQuery = `
+          DELETE FROM booking_players
+          WHERE booking_id IN (
+            SELECT b.id FROM bookings b
+            JOIN courts c ON b.court_id = c.id
+            WHERE c.owner_id = $1
+          )
+        `;
+        await client.query(deleteBookingPlayersQuery, [id]);
+
+        // Xóa các bản ghi trong booking_join_requests liên quan đến các booking của sân thuộc chủ sân
+        const deleteJoinRequestsQuery = `
+          DELETE FROM booking_join_requests
+          WHERE booking_id IN (
+            SELECT b.id FROM bookings b
+            JOIN courts c ON b.court_id = c.id
+            WHERE c.owner_id = $1
+          )
+        `;
+        await client.query(deleteJoinRequestsQuery, [id]);
+      }
+
+      // Xóa người dùng (các bảng khác sẽ được xóa theo CASCADE)
+      const deleteUserQuery = 'DELETE FROM users WHERE id = $1 RETURNING *';
+      const result = await client.query(deleteUserQuery, [id]);
+
+      await client.query('COMMIT');
       return result.rows[0];
     } catch (error) {
+      await client.query('ROLLBACK');
+      console.error('Error deleting user:', error);
       throw error;
+    } finally {
+      client.release();
     }
   },
 

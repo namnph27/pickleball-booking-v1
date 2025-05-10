@@ -164,13 +164,14 @@ const deleteAccount = async () => {
     // Call API to delete account
     const success = await deleteUserAccount();
 
-    if (!success) {
-      throw new Error(t('profile.deleteError'));
+    if (success) {
+      showDeleteModal.value = false;
+      // Đăng xuất và chuyển hướng sẽ được xử lý trong useAuth.ts
     }
-
-    showDeleteModal.value = false;
+    // Không cần throw error ở đây vì lỗi đã được xử lý trong useAuth.ts
   } catch (error) {
-    toast.error(typeof error === 'string' ? error : t('profile.deleteError'));
+    console.error('Error in deleteAccount:', error);
+    // Thông báo lỗi đã được xử lý trong useAuth.ts
   } finally {
     isDeleting.value = false;
   }

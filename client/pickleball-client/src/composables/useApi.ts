@@ -56,23 +56,31 @@ export function useApi() {
       if (error.response && error.response.status === 401) {
         console.log('useApi: 401 Unauthorized error for URL:', error.config.url);
 
-        // Check if request was for admin API
-        const isAdminRequest = error.config.url?.includes('/api/admin/');
+        // Không xử lý lỗi 401 cho các request đăng nhập
+        const isLoginRequest = error.config.url?.includes('/api/auth/login');
 
-        if (isAdminRequest) {
-          console.log('useApi: Admin authentication failed, redirecting to admin login');
-          // Clear admin data
-          localStorage.removeItem('admin_token');
-          localStorage.removeItem('admin');
-          // Redirect to admin login
-          window.location.href = '/admin/login';
+        if (isLoginRequest) {
+          console.log('useApi: Login request failed with 401, not redirecting');
+          // Không làm gì cả, để component xử lý lỗi
         } else {
-          console.log('useApi: User authentication failed, redirecting to user login');
-          // Clear user data
-          localStorage.removeItem('token');
-          localStorage.removeItem('user');
-          // Redirect to user login
-          window.location.href = '/login';
+          // Check if request was for admin API
+          const isAdminRequest = error.config.url?.includes('/api/admin/');
+
+          if (isAdminRequest) {
+            console.log('useApi: Admin authentication failed, redirecting to admin login');
+            // Clear admin data
+            localStorage.removeItem('admin_token');
+            localStorage.removeItem('admin');
+            // Redirect to admin login
+            window.location.href = '/admin/login';
+          } else {
+            console.log('useApi: User authentication failed, redirecting to user login');
+            // Clear user data
+            localStorage.removeItem('token');
+            localStorage.removeItem('user');
+            // Redirect to user login
+            window.location.href = '/login';
+          }
         }
       }
       return Promise.reject(error);

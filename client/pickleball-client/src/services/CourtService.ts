@@ -5,6 +5,8 @@ export interface Court {
   name: string;
   description: string;
   location: string;
+  district?: string;
+  district_name?: string;
   hourly_rate: number;
   owner_id: number;
   owner_name?: string;
@@ -34,6 +36,7 @@ export interface CourtTimeslot {
   day_of_week: number;
   start_time: string;
   end_time: string;
+  price: number;
   is_available: boolean;
 }
 
@@ -54,7 +57,8 @@ export function useCourtService() {
   };
 
   const getCourtById = (id: number) => {
-    return get<{ court: Court }>(`/api/courts/${id}`);
+    console.log('Calling API to get court by ID:', id);
+    return get<{ court: Court, timeslots: CourtTimeslot[] }>(`/api/courts/${id}`);
   };
 
   const getCourtTimeslots = (courtId: number) => {

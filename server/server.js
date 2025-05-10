@@ -4,6 +4,8 @@ const helmet = require('helmet');
 const morgan = require('morgan');
 const dotenv = require('dotenv');
 const http = require('http');
+const fileUpload = require('express-fileupload');
+const path = require('path');
 const socketService = require('./services/socket.service');
 
 // Load environment variables
@@ -18,11 +20,33 @@ const PORT = process.env.PORT || 5000;
 socketService.initialize(server);
 
 // Middleware
-app.use(cors());
-app.use(helmet());
+// Configure CORS
+app.use(cors({
+  origin: ['http://localhost:5173', 'http://127.0.0.1:5173'],
+  credentials: true,
+  exposedHeaders: ['Content-Disposition']
+}));
+
+// Configure Helmet but disable contentSecurityPolicy for local development
+app.use(helmet({
+  contentSecurityPolicy: false,
+  crossOriginResourcePolicy: { policy: 'cross-origin' },
+  crossOriginEmbedderPolicy: false
+}));
+
 app.use(morgan('dev'));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// File upload middleware
+app.use(fileUpload({
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB max file size
+  abortOnLimit: true,
+  createParentPath: true
+}));
+
+// Serve static files
+app.use('/uploads', express.static(path.join(__dirname, 'public/uploads')));
 
 // Routes
 app.get('/', (req, res) => {
@@ -38,6 +62,7 @@ app.use('/api/promotions', require('./routes/promotion.routes'));
 app.use('/api/rewards', require('./routes/reward.routes'));
 app.use('/api/payments', require('./routes/payment.routes'));
 app.use('/api/notifications', require('./routes/notification.routes'));
+app.use('/api/upload', require('./routes/upload.routes'));
 
 // Admin routes (separate admin panel)
 app.use('/api/admin/auth', require('./routes/admin.auth.routes'));

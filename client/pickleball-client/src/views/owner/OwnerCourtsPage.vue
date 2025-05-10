@@ -40,9 +40,9 @@ const columns = computed(() => [
 // Filtered courts
 const filteredCourts = computed(() => {
   if (!searchQuery.value) return courts.value;
-  
+
   const query = searchQuery.value.toLowerCase();
-  return courts.value.filter(court => 
+  return courts.value.filter(court =>
     court.name.toLowerCase().includes(query) ||
     court.location.toLowerCase().includes(query) ||
     (court.description && court.description.toLowerCase().includes(query))
@@ -59,6 +59,22 @@ const formatAvailability = (isAvailable: boolean) => {
   return isAvailable ? t('courts.available') : t('courts.unavailable');
 };
 
+// Get court image with fallback
+const getCourtImage = (court: any) => {
+  if (court.image_url) {
+    // If image URL starts with /uploads, it's a server-side image
+    if (court.image_url.startsWith('/uploads')) {
+      // Use the API URL from environment variables
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+      return `${apiUrl}${court.image_url}`;
+    }
+    return court.image_url;
+  }
+
+  // Fallback to default image
+  return '/images/courts/default-court.svg';
+};
+
 // Open delete modal
 const openDeleteModal = (courtId: number) => {
   courtToDelete.value = courtId;
@@ -68,12 +84,12 @@ const openDeleteModal = (courtId: number) => {
 // Delete court
 const deleteCourt = async () => {
   if (!courtToDelete.value) return;
-  
+
   isDeleting.value = true;
-  
+
   try {
     await courtStore.deleteCourt(courtToDelete.value);
-    
+
     toast.success(t('courtOwner.courtDeleted'));
     showDeleteModal.value = false;
   } catch (error) {
@@ -99,15 +115,15 @@ const toggleAvailability = async (courtId: number, isAvailable: boolean) => {
   try {
     const court = courts.value.find(c => c.id === courtId);
     if (!court) return;
-    
+
     await courtStore.updateCourt(courtId, {
       ...court,
       is_available: !isAvailable
     });
-    
+
     toast.success(
-      isAvailable 
-        ? t('courtOwner.courtMarkedUnavailable') 
+      isAvailable
+        ? t('courtOwner.courtMarkedUnavailable')
         : t('courtOwner.courtMarkedAvailable')
     );
   } catch (error) {
@@ -135,69 +151,69 @@ onMounted(async () => {
     <!-- Header Actions -->
     <template #headerActions>
       <div class="view-toggle">
-        <button 
-          class="toggle-button" 
+        <button
+          class="toggle-button"
           :class="{ 'active': viewMode === 'grid' }"
           @click="viewMode = 'grid'"
         >
           <i class="pi pi-th-large"></i>
         </button>
-        
-        <button 
-          class="toggle-button" 
+
+        <button
+          class="toggle-button"
           :class="{ 'active': viewMode === 'table' }"
           @click="viewMode = 'table'"
         >
           <i class="pi pi-list"></i>
         </button>
       </div>
-      
-      <BaseButton 
-        :label="t('courtOwner.addCourt')" 
+
+      <BaseButton
+        :label="t('courtOwner.addCourt')"
         variant="primary"
         icon="pi-plus"
         @click="router.push('/owner/courts/new')"
       />
     </template>
-    
+
     <!-- Search and Filters -->
     <div class="courts-filters">
       <div class="search-container">
         <div class="search-input">
           <i class="pi pi-search search-icon"></i>
-          <input 
-            v-model="searchQuery" 
-            type="text" 
+          <input
+            v-model="searchQuery"
+            type="text"
             :placeholder="t('courts.searchPlaceholder')"
           />
         </div>
       </div>
     </div>
-    
+
     <!-- Loading State -->
     <div v-if="loading" class="courts-loading">
       <BaseSpinner />
     </div>
-    
+
     <!-- No Courts -->
     <div v-else-if="courts.length === 0" class="no-courts">
       <i class="pi pi-building no-courts-icon"></i>
       <h3>{{ t('courtOwner.noCourts') }}</h3>
       <p>{{ t('courtOwner.addCourtDescription') }}</p>
-      <BaseButton 
-        :label="t('courtOwner.addFirstCourt')" 
+      <BaseButton
+        :label="t('courtOwner.addFirstCourt')"
         variant="primary"
         icon="pi-plus"
         @click="router.push('/owner/courts/new')"
       />
     </div>
-    
+
     <!-- Grid View -->
     <div v-else-if="viewMode === 'grid'" class="courts-grid">
-      <BaseCard 
-        v-for="court in filteredCourts" 
+      <BaseCard
+        v-for="court in filteredCourts"
         :key="court.id"
-        :image="court.image_url || '/images/default-court.jpg'"
+        :image="getCourtImage(court)"
         :image-alt="court.name"
         class="court-card"
       >
@@ -211,64 +227,64 @@ onMounted(async () => {
             </div>
           </div>
         </template>
-        
+
         <div class="court-details">
           <div class="court-info">
             <div class="info-item">
               <i class="pi pi-map-marker"></i>
               <span>{{ court.location }}</span>
             </div>
-            
+
             <div class="info-item">
               <i class="pi pi-dollar"></i>
               <span>${{ court.hourly_rate }}/{{ t('courts.hour') }}</span>
             </div>
-            
+
             <div class="info-item">
               <i class="pi pi-users"></i>
               <span>{{ formatSkillLevel(court.skill_level) }}</span>
             </div>
           </div>
-          
+
           <p v-if="court.description" class="court-description">
-            {{ court.description.length > 100 
-              ? court.description.substring(0, 100) + '...' 
-              : court.description 
+            {{ court.description.length > 100
+              ? court.description.substring(0, 100) + '...'
+              : court.description
             }}
           </p>
         </div>
-        
+
         <template #footer>
           <div class="court-actions">
-            <BaseButton 
-              :label="t('courtOwner.edit')" 
+            <BaseButton
+              :label="t('courtOwner.edit')"
               variant="outline"
               icon="pi-pencil"
               @click="editCourt(court.id)"
             />
-            
-            <BaseButton 
-              :label="t('courtOwner.timeslots')" 
+
+            <BaseButton
+              :label="t('courtOwner.timeslots')"
               variant="outline"
               icon="pi-clock"
               @click="manageTimeslots(court.id)"
             />
-            
+
             <div class="dropdown">
               <button class="dropdown-toggle">
                 <i class="pi pi-ellipsis-v"></i>
               </button>
-              
+
               <div class="dropdown-menu">
-                <button 
+                <button
                   class="dropdown-item"
                   @click="toggleAvailability(court.id, court.is_available)"
                 >
                   <i :class="`pi ${court.is_available ? 'pi-eye-slash' : 'pi-eye'}`"></i>
                   {{ court.is_available ? t('courtOwner.markUnavailable') : t('courtOwner.markAvailable') }}
                 </button>
-                
-                <button 
+
+                <button
                   class="dropdown-item dropdown-item--danger"
                   @click="openDeleteModal(court.id)"
                 >
@@ -281,7 +297,7 @@ onMounted(async () => {
         </template>
       </BaseCard>
     </div>
-    
+
     <!-- Table View -->
     <div v-else class="courts-table">
       <BaseTable
@@ -296,47 +312,47 @@ onMounted(async () => {
         <template #cell(skill_level)="{ value }">
           {{ formatSkillLevel(value) }}
         </template>
-        
+
         <!-- Hourly Rate Column -->
         <template #cell(hourly_rate)="{ value }">
           ${{ value }}
         </template>
-        
+
         <!-- Availability Column -->
         <template #cell(is_available)="{ value }">
           <span :class="['availability-badge', value ? 'available' : 'unavailable']">
             {{ formatAvailability(value) }}
           </span>
         </template>
-        
+
         <!-- Actions Column -->
         <template #actions="{ row }">
           <div class="table-actions">
-            <button 
+            <button
               class="action-button"
               @click.stop="editCourt(row.id)"
               title="Edit"
             >
               <i class="pi pi-pencil"></i>
             </button>
-            
-            <button 
+
+            <button
               class="action-button"
               @click.stop="manageTimeslots(row.id)"
               title="Manage Timeslots"
             >
               <i class="pi pi-clock"></i>
             </button>
-            
-            <button 
+
+            <button
               class="action-button"
               @click.stop="toggleAvailability(row.id, row.is_available)"
               title="Toggle Availability"
             >
               <i :class="`pi ${row.is_available ? 'pi-eye-slash' : 'pi-eye'}`"></i>
             </button>
-            
-            <button 
+
+            <button
               class="action-button action-button--danger"
               @click.stop="openDeleteModal(row.id)"
               title="Delete"
@@ -347,7 +363,7 @@ onMounted(async () => {
         </template>
       </BaseTable>
     </div>
-    
+
     <!-- Delete Court Modal -->
     <BaseModal
       v-model="showDeleteModal"
@@ -359,7 +375,7 @@ onMounted(async () => {
       @ok="deleteCourt"
     >
       <BaseAlert type="warning" :message="t('courtOwner.deleteWarning')" />
-      
+
       <p class="delete-message">
         {{ t('courtOwner.deleteConfirmation') }}
       </p>
@@ -371,7 +387,7 @@ onMounted(async () => {
 .view-toggle {
   display: flex;
   margin-right: 1rem;
-  
+
   .toggle-button {
     width: 36px;
     height: 36px;
@@ -382,15 +398,15 @@ onMounted(async () => {
     border: 1px solid var(--medium-gray);
     color: var(--dark-gray);
     cursor: pointer;
-    
+
     &:first-child {
       border-radius: 4px 0 0 4px;
     }
-    
+
     &:last-child {
       border-radius: 0 4px 4px 0;
     }
-    
+
     &.active {
       background-color: var(--primary-color);
       border-color: var(--primary-color);
@@ -401,13 +417,13 @@ onMounted(async () => {
 
 .courts-filters {
   margin-bottom: 2rem;
-  
+
   .search-container {
     max-width: 500px;
-    
+
     .search-input {
       position: relative;
-      
+
       .search-icon {
         position: absolute;
         left: 1rem;
@@ -415,14 +431,14 @@ onMounted(async () => {
         transform: translateY(-50%);
         color: var(--dark-gray);
       }
-      
+
       input {
         width: 100%;
         padding: 0.75rem 1rem 0.75rem 2.5rem;
         border: 1px solid var(--medium-gray);
         border-radius: 4px;
         font-size: 1rem;
-        
+
         &:focus {
           outline: none;
           border-color: var(--primary-color);
@@ -445,19 +461,19 @@ onMounted(async () => {
   justify-content: center;
   padding: 3rem 0;
   text-align: center;
-  
+
   .no-courts-icon {
     font-size: 3rem;
     color: var(--dark-gray);
     margin-bottom: 1rem;
   }
-  
+
   h3 {
     font-size: 1.25rem;
     font-weight: 600;
     margin-bottom: 0.5rem;
   }
-  
+
   p {
     color: var(--dark-gray);
     margin-bottom: 1.5rem;
@@ -473,18 +489,18 @@ onMounted(async () => {
 
 .court-card {
   height: 100%;
-  
+
   .court-header {
     display: flex;
     justify-content: space-between;
     align-items: flex-start;
-    
+
     .court-name {
       font-size: 1.25rem;
       font-weight: 600;
       margin: 0;
     }
-    
+
     .court-availability {
       .availability-badge {
         display: inline-block;
@@ -492,12 +508,12 @@ onMounted(async () => {
         border-radius: 4px;
         font-size: 0.75rem;
         font-weight: 500;
-        
+
         &.available {
           background-color: rgba(76, 175, 80, 0.1);
           color: #2e7d32;
         }
-        
+
         &.unavailable {
           background-color: rgba(244, 67, 54, 0.1);
           color: #c62828;
@@ -505,42 +521,42 @@ onMounted(async () => {
       }
     }
   }
-  
+
   .court-details {
     margin: 1rem 0;
-    
+
     .court-info {
       display: flex;
       flex-direction: column;
       gap: 0.5rem;
       margin-bottom: 1rem;
-      
+
       .info-item {
         display: flex;
         align-items: center;
         gap: 0.5rem;
-        
+
         i {
           color: var(--primary-color);
           width: 16px;
         }
       }
     }
-    
+
     .court-description {
       font-size: 0.875rem;
       color: var(--dark-gray);
       margin: 0;
     }
   }
-  
+
   .court-actions {
     display: flex;
     gap: 0.5rem;
-    
+
     .dropdown {
       position: relative;
-      
+
       .dropdown-toggle {
         width: 36px;
         height: 36px;
@@ -552,12 +568,12 @@ onMounted(async () => {
         border-radius: 4px;
         color: var(--dark-gray);
         cursor: pointer;
-        
+
         &:hover {
           background-color: var(--light-gray);
         }
       }
-      
+
       .dropdown-menu {
         position: absolute;
         top: 100%;
@@ -569,7 +585,7 @@ onMounted(async () => {
         padding: 0.5rem 0;
         z-index: 10;
         display: none;
-        
+
         .dropdown-item {
           display: flex;
           align-items: center;
@@ -582,21 +598,21 @@ onMounted(async () => {
           font-size: 0.875rem;
           color: var(--text-color);
           cursor: pointer;
-          
+
           &:hover {
             background-color: var(--light-gray);
           }
-          
+
           &--danger {
             color: #f44336;
-            
+
             &:hover {
               background-color: rgba(244, 67, 54, 0.1);
             }
           }
         }
       }
-      
+
       &:hover .dropdown-menu {
         display: block;
       }
@@ -611,23 +627,23 @@ onMounted(async () => {
     border-radius: 4px;
     font-size: 0.75rem;
     font-weight: 500;
-    
+
     &.available {
       background-color: rgba(76, 175, 80, 0.1);
       color: #2e7d32;
     }
-    
+
     &.unavailable {
       background-color: rgba(244, 67, 54, 0.1);
       color: #c62828;
     }
   }
-  
+
   .table-actions {
     display: flex;
     gap: 0.5rem;
     justify-content: center;
-    
+
     .action-button {
       width: 32px;
       height: 32px;
@@ -639,12 +655,12 @@ onMounted(async () => {
       border-radius: 4px;
       color: var(--dark-gray);
       cursor: pointer;
-      
+
       &:hover {
         background-color: var(--light-gray);
         color: var(--text-color);
       }
-      
+
       &--danger:hover {
         background-color: rgba(244, 67, 54, 0.1);
         color: #f44336;
@@ -663,11 +679,11 @@ onMounted(async () => {
   .courts-grid {
     grid-template-columns: 1fr;
   }
-  
+
   .court-card {
     .court-actions {
       flex-wrap: wrap;
-      
+
       > * {
         flex: 1;
       }

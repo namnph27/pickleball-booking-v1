@@ -14,6 +14,7 @@ export interface User {
   profile_image?: string;
   created_at: string;
   updated_at?: string;
+  approval_status?: 'pending' | 'approved' | 'rejected';
 }
 
 export const useAuthStore = defineStore('auth', () => {
@@ -29,6 +30,15 @@ export const useAuthStore = defineStore('auth', () => {
   const isAdmin = computed(() => user.value?.role === 'admin');
   const isCourtOwner = computed(() => user.value?.role === 'court_owner');
   const isCustomer = computed(() => user.value?.role === 'customer');
+  const isPendingApproval = computed(() =>
+    user.value?.role === 'court_owner' && user.value?.approval_status === 'pending'
+  );
+  const isApprovedCourtOwner = computed(() =>
+    user.value?.role === 'court_owner' && user.value?.approval_status === 'approved'
+  );
+  const isRejected = computed(() =>
+    user.value?.role === 'court_owner' && user.value?.approval_status === 'rejected'
+  );
 
   // Set user data
   function setUser(userData: User) {
@@ -112,7 +122,26 @@ export const useAuthStore = defineStore('auth', () => {
 
       return response;
     } catch (err: any) {
-      error.value = err.response?.data?.message || 'Login failed';
+      console.error('Login error:', err);
+
+      // Xử lý lỗi chi tiết hơn
+      if (err.response?.status === 401) {
+        // Tài khoản không tồn tại hoặc mật khẩu không đúng
+        const errorMessage = err.response?.data?.message || '';
+        if (errorMessage === 'Invalid credentials') {
+          // Đây là trường hợp tài khoản không tồn tại hoặc mật khẩu sai
+          error.value = 'accountNotFound'; // Dùng key đặc biệt để xử lý trong component
+        } else {
+          error.value = errorMessage || 'Invalid email or password';
+        }
+      } else if (err.response?.status === 403) {
+        // Tài khoản chưa được phê duyệt hoặc bị từ chối
+        error.value = err.response?.data?.message || 'Account not approved';
+      } else {
+        // Lỗi khác
+        error.value = err.response?.data?.message || 'Login failed';
+      }
+
       throw error.value;
     } finally {
       loading.value = false;
@@ -279,6 +308,39 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
+  // Delete rejected account
+  async function deleteRejectedAccount() {
+    loading.value = true;
+    error.value = '';
+
+    try {
+      // Chỉ xóa tài khoản nếu là chủ sân bị từ chối
+      if (user.value?.role === 'court_owner' && user.value?.approval_status === 'rejected') {
+        try {
+          // Sử dụng axios trực tiếp để gọi API DELETE
+          const token = localStorage.getItem('token');
+          const response = await axios.delete('/api/auth/delete-rejected-account', {
+            headers: {
+              Authorization: `Bearer ${token}`
+            }
+          });
+          console.log('Delete rejected account response:', response.data);
+          return { success: true };
+        } catch (error) {
+          console.error('Error in deleteRejectedAccount:', error);
+          throw 'Failed to delete rejected account';
+        }
+      } else {
+        throw 'Account is not a rejected court owner';
+      }
+    } catch (err: any) {
+      error.value = err.response?.data?.message || 'Failed to delete rejected account';
+      throw error.value;
+    } finally {
+      loading.value = false;
+    }
+  }
+
   return {
     token,
     user,
@@ -290,6 +352,9 @@ export const useAuthStore = defineStore('auth', () => {
     isAdmin,
     isCourtOwner,
     isCustomer,
+    isPendingApproval,
+    isApprovedCourtOwner,
+    isRejected,
     setUser,
     setToken,
     register,
@@ -298,6 +363,7 @@ export const useAuthStore = defineStore('auth', () => {
     setup2FA,
     forgotPassword,
     resetPassword,
+    deleteRejectedAccount,
     logout,
     getProfile,
     init

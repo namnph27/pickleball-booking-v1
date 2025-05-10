@@ -53,7 +53,7 @@ const props = defineProps({
 const emit = defineEmits(['update:modelValue', 'change']);
 
 // If name is provided, use vee-validate
-const { value: selectValue, errorMessage } = props.name 
+const { value: selectValue, errorMessage } = props.name
   ? useField(props.name, undefined, {
       initialValue: props.modelValue,
       validateOnValueUpdate: props.validateOnInput
@@ -85,14 +85,14 @@ const selectClasses = computed(() => {
 
 const onChange = (event: Event) => {
   const target = event.target as HTMLSelectElement;
-  
+
   if (props.multiple) {
     const selectedOptions = Array.from(target.selectedOptions).map(option => option.value);
     selectValue.value = selectedOptions;
   } else {
     selectValue.value = target.value;
   }
-  
+
   emit('change', event);
 };
 </script>
@@ -103,19 +103,18 @@ const onChange = (event: Event) => {
       {{ label }}
       <span v-if="required" class="base-select__required">*</span>
     </label>
-    
+
     <div class="base-select__container">
       <select
-        :value="selectValue"
+        v-model="selectValue"
         :disabled="disabled"
         :multiple="multiple"
         :class="selectClasses"
-        @change="onChange"
       >
         <option v-if="!multiple" value="" disabled>{{ placeholder }}</option>
-        <option 
-          v-for="option in options" 
-          :key="option.value" 
+        <option
+          v-for="option in options"
+          :key="option.value"
           :value="option.value"
         >
           {{ option.label }}
@@ -123,7 +122,7 @@ const onChange = (event: Event) => {
       </select>
       <i class="pi pi-chevron-down base-select__icon"></i>
     </div>
-    
+
     <div v-if="displayError" class="base-select__error">
       {{ displayError }}
     </div>
@@ -136,25 +135,25 @@ const onChange = (event: Event) => {
   flex-direction: column;
   margin-bottom: 1rem;
   width: 100%;
-  
+
   &__label {
     font-size: 0.875rem;
     font-weight: 500;
     margin-bottom: 0.5rem;
     color: var(--text-color);
   }
-  
+
   &__required {
     color: #f44336;
     margin-left: 0.25rem;
   }
-  
+
   &__container {
     position: relative;
     display: flex;
     align-items: center;
   }
-  
+
   &__field {
     width: 100%;
     padding: 0.75rem 1rem;
@@ -167,33 +166,33 @@ const onChange = (event: Event) => {
     font-family: inherit;
     appearance: none;
     cursor: pointer;
-    
+
     &:focus {
       border-color: var(--primary-color);
       box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.2);
     }
-    
+
     &--error {
       border-color: #f44336;
-      
+
       &:focus {
         box-shadow: 0 0 0 2px rgba(244, 67, 54, 0.2);
       }
     }
-    
+
     &--disabled {
       background-color: var(--light-gray);
       cursor: not-allowed;
     }
-    
+
     &[multiple] {
       padding: 0.5rem;
-      
+
       option {
         padding: 0.5rem;
         margin-bottom: 0.25rem;
         border-radius: 2px;
-        
+
         &:checked {
           background-color: rgba(76, 175, 80, 0.1);
           color: var(--primary-color);
@@ -201,7 +200,7 @@ const onChange = (event: Event) => {
       }
     }
   }
-  
+
   &__icon {
     position: absolute;
     right: 1rem;
@@ -209,7 +208,7 @@ const onChange = (event: Event) => {
     font-size: 0.875rem;
     pointer-events: none;
   }
-  
+
   &__error {
     font-size: 0.75rem;
     color: #f44336;

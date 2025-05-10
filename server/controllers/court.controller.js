@@ -16,14 +16,19 @@ const getAllCourts = async (req, res) => {
 const getCourtById = async (req, res) => {
   try {
     const { id } = req.params;
+    console.log('Getting court by ID:', id);
+
     const court = await Court.findById(id);
+    console.log('Court found:', court);
 
     if (!court) {
+      console.log('Court not found with ID:', id);
       return res.status(404).json({ message: 'Court not found' });
     }
 
     // Get timeslots for the court
     const timeslots = await CourtTimeslot.getByCourtId(id);
+    console.log('Timeslots found:', timeslots.length);
 
     res.status(200).json({
       court,
@@ -42,14 +47,15 @@ const createCourt = async (req, res) => {
       name,
       description,
       location,
-      hourly_rate,
-      skill_level,
+      district,
+      district_name,
+      hourly_rate = 0,
       image_url
     } = req.body;
 
     // Validate required fields
-    if (!name || !location || !hourly_rate) {
-      return res.status(400).json({ message: 'Name, location, and hourly rate are required' });
+    if (!location || !district) {
+      return res.status(400).json({ message: 'Location and district are required' });
     }
 
     // Create court
@@ -57,9 +63,10 @@ const createCourt = async (req, res) => {
       name,
       description,
       location,
+      district,
+      district_name,
       hourly_rate,
       owner_id: req.user.id,
-      skill_level: skill_level || 'all',
       image_url,
       is_available: true
     });
@@ -78,38 +85,59 @@ const createCourt = async (req, res) => {
 const updateCourt = async (req, res) => {
   try {
     const { id } = req.params;
+    console.log('Updating court with ID:', id);
+    console.log('Request body:', req.body);
+
     const {
       name,
       description,
       location,
+      district,
+      district_name,
       hourly_rate,
-      skill_level,
       image_url,
       is_available
     } = req.body;
 
+    // Validate required fields
+    if (!name || !location || !district) {
+      console.error('Missing required fields for court update');
+      return res.status(400).json({ message: 'Name, location, and district are required' });
+    }
+
     // Check if court exists
     const court = await Court.findById(id);
+    console.log('Existing court:', court);
 
     if (!court) {
+      console.error('Court not found with ID:', id);
       return res.status(404).json({ message: 'Court not found' });
     }
 
     // Check if user is the owner of the court
     if (court.owner_id !== req.user.id) {
+      console.error('User not authorized to update court. User ID:', req.user.id, 'Court owner ID:', court.owner_id);
       return res.status(403).json({ message: 'You are not authorized to update this court' });
     }
 
+    // Prepare update data with defaults for missing fields
+    const updateData = {
+      name: name || court.name,
+      description: description !== undefined ? description : court.description,
+      location: location || court.location,
+      district: district || court.district,
+      district_name: district_name || court.district_name,
+      hourly_rate: hourly_rate !== undefined ? hourly_rate : court.hourly_rate,
+      skill_level: court.skill_level,
+      image_url: image_url !== undefined ? image_url : court.image_url,
+      is_available: is_available !== undefined ? is_available : court.is_available
+    };
+
+    console.log('Court update data:', updateData);
+
     // Update court
-    const updatedCourt = await Court.update(id, {
-      name,
-      description,
-      location,
-      hourly_rate,
-      skill_level,
-      image_url,
-      is_available
-    });
+    const updatedCourt = await Court.update(id, updateData);
+    console.log('Updated court:', updatedCourt);
 
     res.status(200).json({
       message: 'Court updated successfully',

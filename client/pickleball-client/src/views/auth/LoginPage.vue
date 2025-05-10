@@ -74,14 +74,41 @@ const onSubmit = handleSubmit(async () => {
 
     toast.success(t('auth.loginSuccess'));
 
-    // Kiểm tra vai trò người dùng sau khi đăng nhập
+    // Kiểm tra vai trò và trạng thái phê duyệt người dùng sau khi đăng nhập
     if (authStore.user?.role === 'court_owner') {
-      router.push('/profile');
+      if (authStore.isPendingApproval) {
+        // Nếu là chủ sân đang chờ phê duyệt, chuyển đến trang thông báo
+        router.push('/pending-approval');
+      } else if (authStore.isRejected) {
+        // Nếu là chủ sân bị từ chối, chuyển đến trang thông báo từ chối
+        router.push('/rejected-account');
+      } else {
+        // Nếu là chủ sân đã được phê duyệt, chuyển đến trang profile
+        router.push('/profile');
+      }
     } else {
       router.push(redirectPath.value);
     }
   } catch (error) {
-    loginError.value = typeof error === 'string' ? error : t('auth.loginFailed');
+    console.error('Login error in component:', error);
+
+    // Hiển thị thông báo lỗi chi tiết
+    if (typeof error === 'string') {
+      // Xử lý các trường hợp lỗi đặc biệt
+      if (error === 'accountNotFound') {
+        // Đây là trường hợp tài khoản không tồn tại (đã bị xóa)
+        loginError.value = t('auth.accountNotFound');
+      } else if (error === 'Invalid credentials') {
+        // Trường hợp thông báo lỗi trực tiếp từ server
+        loginError.value = t('auth.invalidCredentials');
+      } else {
+        // Các lỗi khác
+        loginError.value = error;
+      }
+    } else {
+      // Mặc định
+      loginError.value = t('auth.loginFailed');
+    }
   }
 });
 
@@ -99,9 +126,18 @@ const verifyTwoFactor = async () => {
 
     toast.success(t('auth.loginSuccess'));
 
-    // Kiểm tra vai trò người dùng sau khi xác thực 2FA
+    // Kiểm tra vai trò và trạng thái phê duyệt người dùng sau khi xác thực 2FA
     if (authStore.user?.role === 'court_owner') {
-      router.push('/profile');
+      if (authStore.isPendingApproval) {
+        // Nếu là chủ sân đang chờ phê duyệt, chuyển đến trang thông báo
+        router.push('/pending-approval');
+      } else if (authStore.isRejected) {
+        // Nếu là chủ sân bị từ chối, chuyển đến trang thông báo từ chối
+        router.push('/rejected-account');
+      } else {
+        // Nếu là chủ sân đã được phê duyệt, chuyển đến trang profile
+        router.push('/profile');
+      }
     } else {
       router.push(redirectPath.value);
     }

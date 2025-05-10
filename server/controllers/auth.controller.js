@@ -97,24 +97,8 @@ const login = async (req, res) => {
 
     // Kiểm tra trạng thái phê duyệt cho chủ sân
     if (user.role === 'court_owner') {
-      if (user.approval_status === 'pending') {
-        return res.status(403).json({
-          message: 'Your account is pending approval by an administrator.',
-          approval_status: 'pending'
-        });
-      } else if (user.approval_status === 'rejected') {
-        return res.status(403).json({
-          message: 'Your account registration has been rejected. Please contact the administrator for more information.',
-          approval_status: 'rejected'
-        });
-      }
-      // Chỉ cho phép đăng nhập nếu đã được phê duyệt
-      if (user.approval_status !== 'approved') {
-        return res.status(403).json({
-          message: 'Your account is not approved. Please contact the administrator.',
-          approval_status: user.approval_status || 'unknown'
-        });
-      }
+      // Cho phép đăng nhập với tài khoản đang chờ phê duyệt hoặc bị từ chối, nhưng đánh dấu trạng thái
+      // Frontend sẽ xử lý chuyển hướng đến trang pending-approval hoặc rejected-account
     }
 
     // Generate JWT token
@@ -124,15 +108,23 @@ const login = async (req, res) => {
       { expiresIn: process.env.JWT_EXPIRES_IN }
     );
 
+    // Chuẩn bị thông tin người dùng để trả về
+    const userResponse = {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role
+    };
+
+    // Thêm trạng thái phê duyệt nếu là chủ sân
+    if (user.role === 'court_owner') {
+      userResponse.approval_status = user.approval_status || 'pending';
+    }
+
     res.status(200).json({
       message: 'Login successful',
       token,
-      user: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        role: user.role
-      }
+      user: userResponse
     });
   } catch (error) {
     console.error('Login error:', error);
@@ -325,15 +317,23 @@ const verify2FALogin = async (req, res) => {
       { expiresIn: process.env.JWT_EXPIRES_IN }
     );
 
+    // Chuẩn bị thông tin người dùng để trả về
+    const userResponse = {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role
+    };
+
+    // Thêm trạng thái phê duyệt nếu là chủ sân
+    if (user.role === 'court_owner') {
+      userResponse.approval_status = user.approval_status || 'pending';
+    }
+
     res.status(200).json({
       message: 'Login successful',
       token: jwtToken,
-      user: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        role: user.role
-      }
+      user: userResponse
     });
   } catch (error) {
     console.error('Verify 2FA login error:', error);
@@ -345,18 +345,71 @@ const verify2FALogin = async (req, res) => {
 const deleteAccount = async (req, res) => {
   try {
     const userId = req.user.id;
+    const userRole = req.user.role;
+
+    console.log(`Attempting to delete account for user ID: ${userId}, role: ${userRole}`);
+
+    // Nếu là chủ sân, cần xử lý đặc biệt
+    if (userRole === 'court_owner') {
+      console.log('Deleting court owner account, checking for related courts...');
+
+      // Kiểm tra xem chủ sân có sân nào không
+      const db = require('../config/db.config');
+      const courtCheckQuery = 'SELECT COUNT(*) as count FROM courts WHERE owner_id = $1';
+      const courtResult = await db.query(courtCheckQuery, [userId]);
+
+      if (courtResult.rows[0].count > 0) {
+        console.log(`User has ${courtResult.rows[0].count} courts, will be deleted via CASCADE`);
+      }
+    }
 
     // Delete user
     const deletedUser = await User.delete(userId);
 
     if (!deletedUser) {
+      console.log(`User ID ${userId} not found or could not be deleted`);
       return res.status(404).json({ message: 'User not found' });
     }
 
+    console.log(`User ID ${userId} deleted successfully`);
     res.status(200).json({ message: 'Account deleted successfully' });
   } catch (error) {
     console.error('Delete account error:', error);
-    res.status(500).json({ message: 'Server error while deleting account' });
+    // Trả về thông báo lỗi chi tiết hơn
+    const errorMessage = error.message || 'Server error while deleting account';
+    res.status(500).json({ message: errorMessage });
+  }
+};
+
+// Delete rejected account
+const deleteRejectedAccount = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const userRole = req.user.role;
+    const approvalStatus = req.user.approval_status;
+
+    console.log(`Attempting to delete rejected account for user ID: ${userId}, role: ${userRole}, status: ${approvalStatus}`);
+
+    // Chỉ cho phép xóa tài khoản chủ sân bị từ chối
+    if (userRole !== 'court_owner' || approvalStatus !== 'rejected') {
+      return res.status(403).json({ message: 'Only rejected court owner accounts can be deleted with this endpoint' });
+    }
+
+    // Delete user
+    const deletedUser = await User.delete(userId);
+
+    if (!deletedUser) {
+      console.log(`User ID ${userId} not found or could not be deleted`);
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    console.log(`Rejected court owner account ID ${userId} deleted successfully`);
+    res.status(200).json({ message: 'Rejected account deleted successfully' });
+  } catch (error) {
+    console.error('Delete rejected account error:', error);
+    // Trả về thông báo lỗi chi tiết hơn
+    const errorMessage = error.message || 'Server error while deleting rejected account';
+    res.status(500).json({ message: errorMessage });
   }
 };
 
@@ -437,6 +490,7 @@ module.exports = {
   disable2FA,
   verify2FALogin,
   deleteAccount,
+  deleteRejectedAccount,
   forgotPassword,
   resetPassword
 };

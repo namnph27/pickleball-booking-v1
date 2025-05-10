@@ -71,11 +71,8 @@ export function useValidation() {
   const courtSchema = yup.object({
     name: yup.string().required(t('courtOwner.courtNameRequired')),
     location: yup.string().required(t('courtOwner.courtLocationRequired')),
-    hourly_rate: yup.number()
-      .required(t('courtOwner.hourlyRateRequired'))
-      .positive(t('validation.mustBePositive')),
-    description: yup.string(),
-    skill_level: yup.string().required(t('courtOwner.skillLevelRequired'))
+    district: yup.string().required(t('courtOwner.districtRequired')),
+    description: yup.string()
   });
 
   const bookingSchema = yup.object({

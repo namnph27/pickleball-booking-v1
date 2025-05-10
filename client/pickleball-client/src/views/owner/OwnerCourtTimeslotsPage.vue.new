@@ -1,9 +1,9 @@
-<script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue';
+<script setup>
+import { ref, computed, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useI18n } from 'vue-i18n';
 import { useCourtStore } from '../../store/court';
-import { useCourtService, type CourtTimeslot } from '../../services/CourtService';
+import { useCourtService } from '../../services/CourtService';
 import { useToast } from '../../composables/useToast';
 import BaseLayout from '../../components/layout/BaseLayout.vue';
 import BaseButton from '../../components/base/BaseButton.vue';
@@ -23,60 +23,13 @@ const toast = useToast();
 
 // State
 const courtId = computed(() => Number(route.params.id));
-const timeslots = ref<CourtTimeslot[]>([]);
+const timeslots = ref([]);
 const loading = ref(false);
 const showAddModal = ref(false);
 const showEditModal = ref(false);
 const showDeleteModal = ref(false);
 const isSubmitting = ref(false);
-const selectedTimeslot = ref<CourtTimeslot | null>(null);
-
-// Date selection
-const today = new Date();
-const selectedDate = ref(today.toISOString().split('T')[0]);
-const selectedDayOfWeek = computed(() => new Date(selectedDate.value).getDay());
-
-// Future dates for selection
-const futureDates = computed(() => {
-  const dates = [];
-  const currentDate = new Date();
-
-  // Add today and next 30 days
-  for (let i = 0; i < 31; i++) {
-    const date = new Date();
-    date.setDate(currentDate.getDate() + i);
-
-    const dateString = date.toISOString().split('T')[0];
-    const dayName = date.toLocaleDateString('vi-VN', { weekday: 'long' });
-    const formattedDate = date.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' });
-
-    dates.push({
-      value: dateString,
-      label: `${dayName} (${formattedDate})`,
-      dayOfWeek: date.getDay()
-    });
-  }
-
-  return dates;
-});
-
-// Fixed timeslots from 6:00 to 23:00
-const fixedTimeslots = computed(() => {
-  const slots = [];
-
-  for (let hour = 6; hour < 23; hour++) {
-    const startHour = hour.toString().padStart(2, '0');
-    const endHour = (hour + 1).toString().padStart(2, '0');
-
-    slots.push({
-      startTime: `${startHour}:00:00`,
-      endTime: `${endHour}:00:00`,
-      displayTime: `${startHour}:00 - ${endHour}:00`
-    });
-  }
-
-  return slots;
-});
+const selectedTimeslot = ref(null);
 
 // Form state
 const dayOfWeek = ref(1);
@@ -98,7 +51,7 @@ const dayOptions = computed(() => [
 
 // Grouped timeslots by day
 const groupedTimeslots = computed(() => {
-  const grouped: Record<number, CourtTimeslot[]> = {};
+  const grouped = {};
 
   // Initialize all days
   for (let i = 0; i <= 6; i++) {
@@ -120,78 +73,16 @@ const groupedTimeslots = computed(() => {
   return grouped;
 });
 
-// Get timeslots for the selected day
-const selectedDayTimeslots = computed(() => {
-  return groupedTimeslots.value[selectedDayOfWeek.value] || [];
-});
-
-// Map fixed timeslots to actual timeslots
-const mappedTimeslots = computed(() => {
-  const result = [];
-
-  for (const fixedSlot of fixedTimeslots.value) {
-    // Find if there's a matching timeslot for this time period
-    const existingTimeslot = selectedDayTimeslots.value.find(
-      ts => ts.start_time === fixedSlot.startTime && ts.end_time === fixedSlot.endTime
-    );
-
-    if (existingTimeslot) {
-      result.push({
-        ...existingTimeslot,
-        displayTime: fixedSlot.displayTime
-      });
-    } else {
-      // Create a placeholder for timeslots that don't exist yet
-      result.push({
-        id: 0, // Will be used to identify placeholders
-        court_id: courtId.value,
-        day_of_week: selectedDayOfWeek.value,
-        start_time: fixedSlot.startTime,
-        end_time: fixedSlot.endTime,
-        price: 0,
-        is_available: true,
-        displayTime: fixedSlot.displayTime,
-        isPlaceholder: true
-      });
-    }
-  }
-
-  return result;
-});
-
 // Format time
-const formatTime = (timeString: string) => {
+const formatTime = (timeString) => {
   const date = new Date(`2000-01-01T${timeString}`);
   return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-};
-
-// Format price
-const formatPrice = (price: number) => {
-  return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(price || 0);
-};
-
-// Open add/edit modal for a specific timeslot
-const openTimeslotModal = (timeslot: any) => {
-  selectedTimeslot.value = timeslot;
-
-  // Populate form
-  dayOfWeek.value = timeslot.day_of_week;
-  startTime.value = timeslot.start_time;
-  endTime.value = timeslot.end_time;
-  price.value = timeslot.price || 0;
-  isAvailable.value = timeslot.is_available;
-
-  if (timeslot.isPlaceholder) {
-    showAddModal.value = true;
-  } else {
-    showEditModal.value = true;
-  }
 };
 
 // Open add modal
 const openAddModal = () => {
   // Reset form
-  dayOfWeek.value = selectedDayOfWeek.value;
+  dayOfWeek.value = 1;
   startTime.value = '';
   endTime.value = '';
   price.value = 0;
@@ -201,7 +92,7 @@ const openAddModal = () => {
 };
 
 // Add for specific day
-const addForDay = (day: number) => {
+const addForDay = (day) => {
   dayOfWeek.value = day;
   startTime.value = '';
   endTime.value = '';
@@ -212,7 +103,7 @@ const addForDay = (day: number) => {
 };
 
 // Open edit modal
-const openEditModal = (timeslot: CourtTimeslot) => {
+const openEditModal = (timeslot) => {
   selectedTimeslot.value = timeslot;
 
   // Populate form
@@ -226,7 +117,7 @@ const openEditModal = (timeslot: CourtTimeslot) => {
 };
 
 // Open delete modal
-const openDeleteModal = (timeslot: CourtTimeslot) => {
+const openDeleteModal = (timeslot) => {
   selectedTimeslot.value = timeslot;
   showDeleteModal.value = true;
 };
@@ -317,64 +208,18 @@ const deleteTimeslot = async () => {
 };
 
 // Toggle timeslot availability
-const toggleAvailability = async (timeslot: CourtTimeslot) => {
+const toggleAvailability = async (timeslot) => {
   try {
-    // If it's a placeholder, we need to create it first
-    if ((timeslot as any).isPlaceholder) {
-      const timeslotData = {
-        day_of_week: timeslot.day_of_week,
-        start_time: timeslot.start_time,
-        end_time: timeslot.end_time,
-        price: Number(timeslot.price),
-        is_available: false // Start as unavailable since we're toggling from the default available state
-      };
+    await courtService.updateTimeslot(courtId.value, timeslot.id, {
+      ...timeslot,
+      is_available: !timeslot.is_available
+    });
 
-      await courtService.createTimeslot(courtId.value, timeslotData);
-      toast.success(t('courtOwner.timeslotMarkedUnavailable'));
-    } else {
-      await courtService.updateTimeslot(courtId.value, timeslot.id, {
-        ...timeslot,
-        is_available: !timeslot.is_available
-      });
-
-      toast.success(
-        timeslot.is_available
-          ? t('courtOwner.timeslotMarkedUnavailable')
-          : t('courtOwner.timeslotMarkedAvailable')
-      );
-    }
-
-    // Refresh timeslots
-    fetchTimeslots();
-  } catch (error) {
-    toast.error(typeof error === 'string' ? error : t('courtOwner.timeslotUpdateError'));
-  }
-};
-
-// Quick update price
-const quickUpdatePrice = async (timeslot: any, newPrice: number) => {
-  try {
-    if (timeslot.isPlaceholder) {
-      // Create new timeslot with the specified price
-      const timeslotData = {
-        day_of_week: timeslot.day_of_week,
-        start_time: timeslot.start_time,
-        end_time: timeslot.end_time,
-        price: newPrice,
-        is_available: true
-      };
-
-      await courtService.createTimeslot(courtId.value, timeslotData);
-      toast.success(t('courtOwner.timeslotAdded'));
-    } else {
-      // Update existing timeslot
-      await courtService.updateTimeslot(courtId.value, timeslot.id, {
-        ...timeslot,
-        price: newPrice
-      });
-
-      toast.success(t('courtOwner.timeslotUpdated'));
-    }
+    toast.success(
+      timeslot.is_available
+        ? t('courtOwner.timeslotMarkedUnavailable')
+        : t('courtOwner.timeslotMarkedAvailable')
+    );
 
     // Refresh timeslots
     fetchTimeslots();
@@ -421,107 +266,109 @@ onMounted(async () => {
     :back-link="`/owner/courts`"
     :loading="courtStore.loading"
   >
-    <!-- Header Actions -->
-    <template #headerActions>
-      <BaseButton
-        :label="t('courtOwner.addTimeslot')"
-        variant="primary"
-        icon="pi-plus"
-        @click="openAddModal"
-      />
-    </template>
+    <template v-if="courtStore.currentCourt">
+      <!-- Header Actions -->
+      <template #headerActions>
+        <BaseButton
+          :label="t('courtOwner.addTimeslot')"
+          variant="primary"
+          icon="pi-plus"
+          @click="openAddModal"
+        />
+      </template>
 
-    <!-- Main Content -->
-    <div v-if="courtStore.currentCourt" class="timeslots-container">
-      <!-- Loading State -->
-      <div v-if="loading" class="timeslots-loading">
-        <BaseSpinner />
-      </div>
+      <!-- Timeslots Content -->
+      <div class="timeslots-container">
+        <!-- Loading State -->
+        <div v-if="loading" class="timeslots-loading">
+          <BaseSpinner />
+        </div>
 
-      <!-- Date Selection -->
-      <div v-else class="date-selection">
-        <h3 class="section-title">{{ t('courtOwner.selectDate') }}</h3>
-        <div class="date-selector">
-          <BaseSelect
-            :modelValue="selectedDate"
-            @update:modelValue="selectedDate = $event"
-            :options="futureDates"
-            :label="t('courtOwner.date')"
+        <!-- No Timeslots -->
+        <div v-else-if="timeslots.length === 0" class="no-timeslots">
+          <i class="pi pi-clock no-timeslots-icon"></i>
+          <h3>{{ t('courtOwner.noTimeslots') }}</h3>
+          <p>{{ t('courtOwner.addTimeslotsDescription') }}</p>
+          <BaseButton
+            :label="t('courtOwner.addFirstTimeslot')"
+            variant="primary"
+            icon="pi-plus"
+            @click="openAddModal"
           />
         </div>
 
-        <div class="timeslots-header">
-          <h3 class="section-title">{{ t('courtOwner.timeslots') }}</h3>
-          <p class="section-subtitle">
-            {{ t('courtOwner.timeslotsDescription') }}
-          </p>
-        </div>
-
-        <!-- Fixed Timeslots Grid -->
-        <div class="fixed-timeslots-grid">
-          <BaseCard
-            v-for="timeslot in mappedTimeslots"
-            :key="`${timeslot.day_of_week}-${timeslot.start_time}`"
-            :class="['timeslot-card', { 'timeslot-card--placeholder': timeslot.isPlaceholder }]"
+        <!-- Timeslots by Day -->
+        <div v-else class="timeslots-by-day">
+          <div
+            v-for="(dayTimeslots, day) in groupedTimeslots"
+            :key="day"
+            class="day-section"
           >
-            <div class="timeslot-time">
-              <i class="pi pi-clock"></i>
-              <span>{{ timeslot.displayTime }}</span>
+            <h3 class="day-title">{{ dayOptions.find(d => d.value === Number(day))?.label }}</h3>
+
+            <div v-if="dayTimeslots.length === 0" class="no-day-timeslots">
+              <p>{{ t('courtOwner.noTimeslotsForDay') }}</p>
+              <BaseButton
+                :label="t('courtOwner.addTimeslot')"
+                variant="outline"
+                size="small"
+                @click="addForDay(Number(day))"
+              />
             </div>
 
-            <div class="timeslot-price">
-              <i class="pi pi-money-bill"></i>
-              <span>{{ formatPrice(timeslot.price) }}</span>
-
-              <!-- Quick Price Buttons -->
-              <div class="quick-price-buttons">
-                <button
-                  v-for="quickPrice in [100000, 150000, 200000]"
-                  :key="quickPrice"
-                  class="quick-price-button"
-                  @click="quickUpdatePrice(timeslot, quickPrice)"
-                >
-                  {{ formatPrice(quickPrice) }}
-                </button>
-              </div>
-            </div>
-
-            <div class="timeslot-status">
-              <span :class="['status-badge', timeslot.is_available ? 'available' : 'unavailable']">
-                {{ timeslot.is_available ? t('courts.available') : t('courts.unavailable') }}
-              </span>
-            </div>
-
-            <div class="timeslot-actions">
-              <button
-                class="action-button"
-                @click="openTimeslotModal(timeslot)"
-                title="Edit"
+            <div v-else class="timeslots-grid">
+              <BaseCard
+                v-for="timeslot in dayTimeslots"
+                :key="timeslot.id"
+                class="timeslot-card"
               >
-                <i class="pi pi-pencil"></i>
-              </button>
+                <div class="timeslot-time">
+                  <i class="pi pi-clock"></i>
+                  <span>{{ formatTime(timeslot.start_time) }} - {{ formatTime(timeslot.end_time) }}</span>
+                </div>
 
-              <button
-                class="action-button"
-                @click="toggleAvailability(timeslot)"
-                :title="timeslot.is_available ? 'Mark Unavailable' : 'Mark Available'"
-              >
-                <i :class="`pi ${timeslot.is_available ? 'pi-eye-slash' : 'pi-eye'}`"></i>
-              </button>
+                <div class="timeslot-price">
+                  <i class="pi pi-money-bill"></i>
+                  <span>{{ new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(timeslot.price || 0) }}</span>
+                </div>
 
-              <button
-                v-if="!timeslot.isPlaceholder"
-                class="action-button action-button--danger"
-                @click="openDeleteModal(timeslot)"
-                title="Delete"
-              >
-                <i class="pi pi-trash"></i>
-              </button>
+                <div class="timeslot-status">
+                  <span :class="['status-badge', timeslot.is_available ? 'available' : 'unavailable']">
+                    {{ timeslot.is_available ? t('courts.available') : t('courts.unavailable') }}
+                  </span>
+                </div>
+
+                <div class="timeslot-actions">
+                  <button
+                    class="action-button"
+                    @click="openEditModal(timeslot)"
+                    title="Edit"
+                  >
+                    <i class="pi pi-pencil"></i>
+                  </button>
+
+                  <button
+                    class="action-button"
+                    @click="toggleAvailability(timeslot)"
+                    title="Toggle Availability"
+                  >
+                    <i :class="['pi', timeslot.is_available ? 'pi-eye-slash' : 'pi-eye']"></i>
+                  </button>
+
+                  <button
+                    class="action-button action-button--danger"
+                    @click="openDeleteModal(timeslot)"
+                    title="Delete"
+                  >
+                    <i class="pi pi-trash"></i>
+                  </button>
+                </div>
+              </BaseCard>
             </div>
-          </BaseCard>
+          </div>
         </div>
       </div>
-    </div>
+    </template>
 
     <!-- Add Timeslot Modal -->
     <BaseModal
@@ -696,42 +543,12 @@ onMounted(async () => {
 </template>
 
 <style scoped lang="scss">
+@use "sass:color";
+
 .timeslots-loading {
   display: flex;
   justify-content: center;
   padding: 3rem 0;
-}
-
-.date-selection {
-  margin-bottom: 2rem;
-
-  .section-title {
-    font-size: 1.25rem;
-    font-weight: 600;
-    margin: 0 0 1rem 0;
-  }
-
-  .section-subtitle {
-    color: var(--dark-gray);
-    margin-bottom: 1rem;
-  }
-
-  .date-selector {
-    max-width: 500px;
-    margin-bottom: 2rem;
-  }
-
-  .timeslots-header {
-    margin-bottom: 1rem;
-    border-bottom: 1px solid var(--light-gray);
-    padding-bottom: 0.5rem;
-  }
-}
-
-.fixed-timeslots-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
-  gap: 1rem;
 }
 
 .no-timeslots {
@@ -761,30 +578,53 @@ onMounted(async () => {
   }
 }
 
-.timeslot-card {
+.timeslots-by-day {
   display: flex;
   flex-direction: column;
+  gap: 2rem;
+
+  .day-section {
+    .day-title {
+      font-size: 1.25rem;
+      font-weight: 600;
+      margin: 0 0 1rem 0;
+      padding-bottom: 0.5rem;
+      border-bottom: 1px solid var(--light-gray);
+    }
+
+    .no-day-timeslots {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 1rem;
+      background-color: var(--light-gray);
+      border-radius: 8px;
+
+      p {
+        margin: 0;
+        color: var(--dark-gray);
+      }
+    }
+
+    .timeslots-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 1rem;
+    }
+  }
+}
+
+.timeslot-card {
+  display: flex;
+  align-items: center;
   padding: 1rem;
-  transition: all 0.2s ease;
-
-  &--placeholder {
-    background-color: rgba(0, 0, 0, 0.02);
-    border: 1px dashed var(--medium-gray);
-  }
-
-  &:hover {
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-  }
 
   .timeslot-time {
+    flex: 1;
     display: flex;
     align-items: center;
     gap: 0.5rem;
-    font-weight: 600;
-    font-size: 1.1rem;
-    margin-bottom: 1rem;
-    padding-bottom: 0.5rem;
-    border-bottom: 1px solid var(--light-gray);
+    font-weight: 500;
 
     i {
       color: var(--primary-color);
@@ -793,51 +633,24 @@ onMounted(async () => {
 
   .timeslot-price {
     display: flex;
-    flex-direction: column;
+    align-items: center;
     gap: 0.5rem;
-    margin-bottom: 1rem;
+    font-weight: 500;
+    margin-right: 1rem;
 
     i {
       color: #4caf50;
-      margin-right: 0.5rem;
-    }
-
-    span {
-      font-weight: 500;
-      font-size: 1.1rem;
-    }
-
-    .quick-price-buttons {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.5rem;
-      margin-top: 0.5rem;
-
-      .quick-price-button {
-        background-color: var(--light-gray);
-        border: none;
-        border-radius: 4px;
-        padding: 0.25rem 0.5rem;
-        font-size: 0.8rem;
-        cursor: pointer;
-        transition: all 0.2s ease;
-
-        &:hover {
-          background-color: var(--primary-color);
-          color: white;
-        }
-      }
     }
   }
 
   .timeslot-status {
-    margin-bottom: 1rem;
+    margin-right: 1rem;
 
     .status-badge {
       display: inline-block;
-      padding: 0.25rem 0.75rem;
+      padding: 0.25rem 0.5rem;
       border-radius: 4px;
-      font-size: 0.8rem;
+      font-size: 0.75rem;
       font-weight: 500;
 
       &.available {
@@ -855,12 +668,10 @@ onMounted(async () => {
   .timeslot-actions {
     display: flex;
     gap: 0.5rem;
-    margin-top: auto;
-    justify-content: flex-end;
 
     .action-button {
-      width: 36px;
-      height: 36px;
+      width: 32px;
+      height: 32px;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -869,7 +680,6 @@ onMounted(async () => {
       border-radius: 4px;
       color: var(--dark-gray);
       cursor: pointer;
-      transition: all 0.2s ease;
 
       &:hover {
         background-color: var(--light-gray);
@@ -944,8 +754,19 @@ onMounted(async () => {
 }
 
 @media (max-width: 768px) {
-  .fixed-timeslots-grid {
-    grid-template-columns: 1fr;
+  .timeslot-card {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.75rem;
+
+    .timeslot-status {
+      margin-right: 0;
+    }
+
+    .timeslot-actions {
+      width: 100%;
+      justify-content: flex-end;
+    }
   }
 
   .timeslot-form {

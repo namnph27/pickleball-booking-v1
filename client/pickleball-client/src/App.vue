@@ -21,6 +21,10 @@ const isAdminRoute = computed(() => {
 });
 
 const logout = () => {
+  // Không cho phép đăng xuất thông thường nếu đang ở trang rejected-account
+  if (route.name === 'rejected-account') {
+    return;
+  }
   authStore.logout();
 };
 
@@ -125,7 +129,7 @@ const availableLanguages = [
               <!-- Chỉ hiển thị liên kết Điểm thưởng cho người chơi, không hiển thị cho chủ sân -->
               <router-link v-if="!isCourtOwner" to="/rewards" class="dropdown-item" @click="isUserDropdownOpen = false; isMobileMenuOpen = false">{{ t('rewards.myRewards') }}</router-link>
               <div class="dropdown-divider"></div>
-              <button @click="logout" class="dropdown-item">{{ t('common.logout') }}</button>
+              <button @click="logout" class="dropdown-item" :disabled="$route.name === 'rejected-account'" :class="{ 'dropdown-item--disabled': $route.name === 'rejected-account' }">{{ t('common.logout') }}</button>
             </div>
           </div>
 
@@ -586,6 +590,13 @@ input, textarea, select, button {
   transition: all 0.3s ease;
   position: relative;
   overflow: hidden;
+
+  &--disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    pointer-events: none;
+    background-color: rgba(0, 0, 0, 0.05);
+  }
 
   &::before {
     content: '';

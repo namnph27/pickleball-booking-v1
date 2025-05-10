@@ -7,18 +7,30 @@ const Court = {
       name,
       description,
       location,
+      district,
+      district_name,
       hourly_rate,
       owner_id,
-      skill_level,
+      skill_level = 'allLevels',
       image_url,
       is_available = true
     } = courtData;
+
+    // Get the count of courts for this owner to generate court number
+    const countQuery = 'SELECT COUNT(*) FROM courts WHERE owner_id = $1';
+    const countResult = await db.query(countQuery, [owner_id]);
+    const courtCount = parseInt(countResult.rows[0].count) + 1;
+
+    // Generate court name with number if not provided
+    const courtName = name || `Sân ${courtCount}`;
 
     const query = `
       INSERT INTO courts (
         name,
         description,
         location,
+        district,
+        district_name,
         hourly_rate,
         owner_id,
         skill_level,
@@ -27,14 +39,16 @@ const Court = {
         created_at,
         updated_at
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW())
       RETURNING *
     `;
 
     const values = [
-      name,
+      courtName,
       description,
       location,
+      district,
+      district_name,
       hourly_rate,
       owner_id,
       skill_level,
@@ -52,6 +66,7 @@ const Court = {
 
   // Find court by ID
   async findById(id) {
+    console.log('Finding court by ID in model:', id);
     const query = `
       SELECT c.*, u.name as owner_name, u.phone as owner_phone
       FROM courts c
@@ -61,23 +76,43 @@ const Court = {
 
     try {
       const result = await db.query(query, [id]);
+      console.log('Query result:', result.rows);
+
+      if (result.rows.length === 0) {
+        console.log('No court found with ID:', id);
+        return null;
+      }
+
+      console.log('Court found:', result.rows[0]);
       return result.rows[0];
     } catch (error) {
+      console.error('Error finding court by ID:', error);
       throw error;
     }
   },
 
   // Update court
   async update(id, courtData) {
+    console.log('Updating court in model with ID:', id);
+    console.log('Court data for update:', courtData);
+
     const {
       name,
       description,
       location,
+      district,
+      district_name,
       hourly_rate,
       skill_level,
       image_url,
       is_available
     } = courtData;
+
+    // Validate required fields
+    if (!name || !location || !district) {
+      console.error('Missing required fields for court update in model');
+      throw new Error('Name, location, and district are required');
+    }
 
     const query = `
       UPDATE courts
@@ -85,12 +120,14 @@ const Court = {
         name = $1,
         description = $2,
         location = $3,
-        hourly_rate = $4,
-        skill_level = $5,
-        image_url = $6,
-        is_available = $7,
+        district = $4,
+        district_name = $5,
+        hourly_rate = $6,
+        skill_level = $7,
+        image_url = $8,
+        is_available = $9,
         updated_at = NOW()
-      WHERE id = $8
+      WHERE id = $10
       RETURNING *
     `;
 
@@ -98,6 +135,8 @@ const Court = {
       name,
       description,
       location,
+      district,
+      district_name,
       hourly_rate,
       skill_level,
       image_url,
@@ -106,9 +145,18 @@ const Court = {
     ];
 
     try {
+      console.log('Executing update query with values:', values);
       const result = await db.query(query, values);
+
+      if (result.rows.length === 0) {
+        console.error('No court found with ID:', id);
+        throw new Error('Court not found');
+      }
+
+      console.log('Court updated successfully:', result.rows[0]);
       return result.rows[0];
     } catch (error) {
+      console.error('Error updating court in model:', error);
       throw error;
     }
   },

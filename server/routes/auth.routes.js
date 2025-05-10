@@ -17,6 +17,7 @@ router.get('/profile', verifyToken, authController.getProfile);
 router.put('/profile', verifyToken, authController.updateProfile);
 router.put('/change-password', verifyToken, authController.changePassword);
 router.delete('/delete-account', verifyToken, authController.deleteAccount);
+router.delete('/delete-rejected-account', verifyToken, authController.deleteRejectedAccount);
 
 // 2FA management routes (protected)
 router.post('/2fa/setup', verifyToken, authController.setup2FA);

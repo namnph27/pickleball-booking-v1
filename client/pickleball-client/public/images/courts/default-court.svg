@@ -1,0 +1,25 @@
+<svg width="800" height="400" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background -->
+  <rect width="800" height="400" fill="#4CAF50" />
+  
+  <!-- Court outline -->
+  <rect x="50" y="50" width="700" height="300" fill="#8BC34A" stroke="white" stroke-width="4" />
+  
+  <!-- Net -->
+  <line x1="400" y1="50" x2="400" y2="350" stroke="white" stroke-width="4" />
+  
+  <!-- Non-volley zone (kitchen) lines -->
+  <rect x="50" y="120" width="350" height="160" fill="none" stroke="white" stroke-width="2" />
+  <rect x="400" y="120" width="350" height="160" fill="none" stroke="white" stroke-width="2" />
+  
+  <!-- Service lines -->
+  <line x1="50" y1="200" x2="400" y2="200" stroke="white" stroke-width="2" />
+  <line x1="400" y1="200" x2="750" y2="200" stroke="white" stroke-width="2" />
+  
+  <!-- Center lines -->
+  <line x1="225" y1="50" x2="225" y2="350" stroke="white" stroke-width="2" />
+  <line x1="575" y1="50" x2="575" y2="350" stroke="white" stroke-width="2" />
+  
+  <!-- Text -->
+  <text x="400" y="30" font-family="Arial" font-size="24" fill="white" text-anchor="middle">Pickleball Court</text>
+</svg>

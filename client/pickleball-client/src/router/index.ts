@@ -43,6 +43,12 @@ const router = createRouter({
       component: () => import('../views/auth/PendingApprovalPage.vue'),
       meta: { title: 'Account Pending Approval' }
     },
+    {
+      path: '/rejected-account',
+      name: 'rejected-account',
+      component: () => import('../views/auth/RejectedAccountPage.vue'),
+      meta: { title: 'Account Rejected' }
+    },
     // Court Routes
     {
       path: '/courts',
@@ -293,6 +299,42 @@ router.beforeEach((to, from, next) => {
   // Handle routes that require user authentication
   if (to.meta.requiresAuth && !isAuthenticated) {
     next({ name: 'login', query: { redirect: to.fullPath } });
+    return;
+  }
+
+  // Check if court owner is pending approval or rejected
+  let isPendingApproval = false;
+  let isRejected = false;
+  try {
+    const authStore = useAuthStore();
+    isPendingApproval = authStore.isPendingApproval;
+    isRejected = authStore.isRejected;
+  } catch (e) {
+    // Fallback to localStorage if store is not available
+    const userObj = JSON.parse(localStorage.getItem('user') || 'null');
+    isPendingApproval = userObj?.role === 'court_owner' && userObj?.approval_status === 'pending';
+    isRejected = userObj?.role === 'court_owner' && userObj?.approval_status === 'rejected';
+  }
+
+  // Redirect court owner with pending approval to pending-approval page
+  // except for the pending-approval page itself and login page
+  if (isPendingApproval &&
+      to.name !== 'pending-approval' &&
+      to.name !== 'login' &&
+      !to.path.startsWith('/admin')) {
+    console.log('Court owner with pending approval attempting to access restricted route, redirecting to pending-approval');
+    next({ name: 'pending-approval' });
+    return;
+  }
+
+  // Redirect court owner with rejected account to rejected-account page
+  // except for the rejected-account page itself and login page
+  if (isRejected &&
+      to.name !== 'rejected-account' &&
+      to.name !== 'login' &&
+      !to.path.startsWith('/admin')) {
+    console.log('Court owner with rejected account attempting to access restricted route, redirecting to rejected-account');
+    next({ name: 'rejected-account' });
     return;
   }
 
