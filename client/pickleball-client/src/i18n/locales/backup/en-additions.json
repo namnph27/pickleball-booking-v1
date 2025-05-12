@@ -1,0 +1,23 @@
+{
+  "auth": {
+    "resetPasswordTitle": "Reset Password",
+    "resetPasswordDesc": "Please enter your new password",
+    "resetPasswordButton": "Reset Password",
+    "newPassword": "New Password"
+  },
+  "amenities": {
+    "parking": "Parking",
+    "restrooms": "Restrooms",
+    "waterFountain": "Water Fountain",
+    "lighting": "Lighting",
+    "showers": "Showers",
+    "lockers": "Lockers",
+    "proshop": "Pro Shop",
+    "restaurant": "Restaurant/Cafe",
+    "wifi": "Free Wi-Fi",
+    "airConditioning": "Air Conditioning",
+    "heater": "Heater",
+    "spectatorSeating": "Spectator Seating",
+    "equipmentRental": "Equipment Rental"
+  }
+}

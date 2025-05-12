@@ -3,21 +3,6 @@
     "minLength": "Phải có ít nhất {min} ký tự",
     "mustBePositive": "Giá trị phải là số dương"
   },
-  "amenities": {
-    "parking": "Bãi đỗ xe",
-    "restrooms": "Nhà vệ sinh",
-    "waterFountain": "Vòi nước uống",
-    "lighting": "Hệ thống chiếu sáng",
-    "showers": "Phòng tắm",
-    "lockers": "Tủ đồ",
-    "proshop": "Cửa hàng dụng cụ",
-    "restaurant": "Nhà hàng/Quán cà phê",
-    "wifi": "Wi-Fi miễn phí",
-    "airConditioning": "Điều hòa không khí",
-    "heater": "Máy sưởi",
-    "spectatorSeating": "Chỗ ngồi cho khán giả",
-    "equipmentRental": "Cho thuê dụng cụ"
-  },
   "common": {
     "home": "Trang chủ",
     "courts": "Sân",
@@ -195,11 +180,7 @@
     "rememberPassword": "Đã nhớ mật khẩu?",
     "passwordResetSuccess": "Đặt lại mật khẩu thành công",
     "passwordResetFailed": "Đặt lại mật khẩu thất bại. Vui lòng thử lại",
-    "logout": "Đăng xuất",
-    "resetPasswordTitle": "Đặt lại mật khẩu",
-    "resetPasswordDesc": "Vui lòng nhập mật khẩu mới của bạn",
-    "resetPasswordButton": "Đặt lại mật khẩu",
-    "newPassword": "Mật khẩu mới"
+    "logout": "Đăng xuất"
   },
   "courts": {
     "findCourts": "Tìm sân Pickleball",
@@ -231,9 +212,7 @@
     "openHours": "Giờ mở cửa: {hours}",
     "maxPlayers": "Tối đa {count} người chơi",
     "name": "Tên sân",
-    "description": "Mô tả sân",
-    "mapPlaceholder": "Bản đồ sẽ được hiển thị ở đây",
-    "noAvailabilityForDate": "Không có khung giờ nào cho ngày này"
+    "description": "Mô tả sân"
   },
   "booking": {
     "bookCourt": "Đặt sân",

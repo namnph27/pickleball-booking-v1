@@ -95,7 +95,7 @@
           <div v-else class="courts-grid">
             <BaseCard v-for="court in joinableCourts" :key="court.id" class="court-card">
               <div class="court-image">
-                <img :src="court.image_url || '/images/default-court.jpg'" :alt="court.court_name" />
+                <img :src="getCourtImage(court)" :alt="court.court_name" />
                 <div class="court-skill-level" v-if="court.skill_level">
                   {{ getSkillLevelLabel(court.skill_level) }}
                 </div>
@@ -471,6 +471,22 @@ const getSkillLevelLabel = (skillLevel) => {
 
   const option = skillLevelOptions.value.find(opt => opt.value === skillLevel);
   return option ? option.label : skillLevel;
+};
+
+// Get court image with proper URL
+const getCourtImage = (court) => {
+  if (court.image_url) {
+    // If image URL starts with /uploads, it's a server-side image
+    if (court.image_url.startsWith('/uploads')) {
+      // Use the API URL from environment variables
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+      return `${apiUrl}${court.image_url}`;
+    }
+    return court.image_url;
+  }
+
+  // Fallback to default image
+  return '/images/default-court.jpg';
 };
 
 // Lifecycle

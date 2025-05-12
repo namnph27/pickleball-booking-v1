@@ -219,7 +219,7 @@ const availableLanguages = [
               <a href="#" class="social-link"><i class="pi pi-facebook"></i></a>
               <a href="#" class="social-link"><i class="pi pi-instagram"></i></a>
               <a href="#" class="social-link"><i class="pi pi-youtube"></i></a>
-              <router-link to="/admin/login" class="admin-link">Admin</router-link>
+              <!-- Đã ẩn nút Admin -->
             </div>
           </div>
         </div>

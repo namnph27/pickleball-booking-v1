@@ -212,6 +212,15 @@ const onSubmit = handleSubmit(async (formValues) => {
       newCourtId = newCourt.id;
       toast.success(t('courtOwner.courtCreated'));
 
+      // Update the owner's courts list in localStorage before redirecting
+      try {
+        await courtStore.getCourtsByOwner();
+        console.log('Updated owner courts list after creating new court');
+      } catch (error) {
+        console.error('Error updating owner courts list:', error);
+        // Continue with redirect even if update fails
+      }
+
       // Redirect to time slot pricing page
       router.push(`/owner/courts/${newCourtId}/timeslots`);
     }

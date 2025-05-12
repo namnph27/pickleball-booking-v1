@@ -55,42 +55,93 @@ export const useAuthStore = defineStore('auth', () => {
 
   // Register a new user
   async function register(userData: any) {
+    console.log('Register function called with data:', userData);
+
+    // Ensure loading state is reset at the beginning
     loading.value = true;
     error.value = '';
 
     try {
       console.log('Registering user with data:', userData);
 
-      const response = await post<{
-        token: string;
-        user: User;
-        message: string;
-        requires_2fa_setup?: boolean;
-        qr_code?: string;
-      }>('/api/auth/register', userData, false);
-
-      console.log('Registration API response:', response);
-
-      // Check if 2FA setup is required
-      if (response.requires_2fa_setup) {
-        twoFactorRequired.value = true;
-        twoFactorToken.value = response.token;
-        return {
-          requires_2fa_setup: true,
-          qr_code: response.qr_code
-        };
+      // Make sure we have all required fields
+      if (!userData.name || !userData.email || !userData.password || !userData.phone) {
+        console.error('Missing required fields in register function');
+        throw new Error('Missing required fields');
       }
 
-      setToken(response.token);
-      setUser(response.user);
+      // Make API request
+      console.log('Making API request to /api/auth/register');
 
-      return response;
+      try {
+        // Sử dụng axios trực tiếp để có thêm thông tin lỗi chi tiết
+        const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+        console.log('API URL:', apiUrl);
+
+        const axiosResponse = await axios.post(`${apiUrl}/api/auth/register`, userData, {
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+          }
+        });
+
+        console.log('Registration API direct response:', axiosResponse);
+
+        const response = axiosResponse.data;
+        console.log('Registration API response data:', response);
+
+        // Check if 2FA setup is required
+        if (response.requires_2fa_setup) {
+          twoFactorRequired.value = true;
+          twoFactorToken.value = response.token;
+          return {
+            requires_2fa_setup: true,
+            qr_code: response.qr_code
+          };
+        }
+
+        // Set user data and token
+        setToken(response.token);
+        setUser(response.user);
+
+        return response;
+      } catch (axiosError: any) {
+        console.error('Axios error during registration:', axiosError);
+        console.error('Axios error response:', axiosError.response);
+
+        if (axiosError.response?.data?.message) {
+          error.value = axiosError.response.data.message;
+        } else if (axiosError.message) {
+          error.value = axiosError.message;
+        } else {
+          error.value = 'Registration failed - server error';
+        }
+
+        throw error.value;
+      }
     } catch (err: any) {
       console.error('Registration error details:', err);
-      error.value = err.response?.data?.message || 'Registration failed';
+
+      // Improve error handling
+      if (err.response?.data?.message) {
+        error.value = err.response.data.message;
+      } else if (typeof err === 'string') {
+        error.value = err;
+      } else if (err.message) {
+        error.value = err.message;
+      } else {
+        error.value = 'Registration failed';
+      }
+
       throw error.value;
     } finally {
-      loading.value = false;
+      // Ensure loading state is always reset with a slight delay
+      // to prevent UI flicker and ensure state is updated properly
+      console.log('Resetting loading state in register function');
+      setTimeout(() => {
+        loading.value = false;
+        console.log('Loading state reset to false');
+      }, 300);
     }
   }
 
@@ -128,18 +179,14 @@ export const useAuthStore = defineStore('auth', () => {
       if (err.response?.status === 401) {
         // Tài khoản không tồn tại hoặc mật khẩu không đúng
         const errorMessage = err.response?.data?.message || '';
-        if (errorMessage === 'Invalid credentials') {
-          // Đây là trường hợp tài khoản không tồn tại hoặc mật khẩu sai
-          error.value = 'accountNotFound'; // Dùng key đặc biệt để xử lý trong component
-        } else {
-          error.value = errorMessage || 'Invalid email or password';
-        }
+        // Trả về thông báo lỗi trực tiếp từ server
+        error.value = errorMessage || 'Email hoặc mật khẩu không đúng';
       } else if (err.response?.status === 403) {
         // Tài khoản chưa được phê duyệt hoặc bị từ chối
-        error.value = err.response?.data?.message || 'Account not approved';
+        error.value = err.response?.data?.message || 'Tài khoản chưa được phê duyệt';
       } else {
         // Lỗi khác
-        error.value = err.response?.data?.message || 'Login failed';
+        error.value = err.response?.data?.message || 'Đăng nhập thất bại';
       }
 
       throw error.value;

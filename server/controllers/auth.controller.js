@@ -86,13 +86,13 @@ const login = async (req, res) => {
     // Check if user exists
     const user = await User.findByEmail(email);
     if (!user) {
-      return res.status(401).json({ message: 'Invalid credentials' });
+      return res.status(401).json({ message: 'Tài khoản không tồn tại. Vui lòng kiểm tra lại email hoặc đăng ký tài khoản mới.' });
     }
 
     // Verify password
     const isPasswordValid = await User.verifyPassword(password, user.password);
     if (!isPasswordValid) {
-      return res.status(401).json({ message: 'Invalid credentials' });
+      return res.status(401).json({ message: 'Wrong password' });
     }
 
     // Kiểm tra trạng thái phê duyệt cho chủ sân
@@ -296,7 +296,7 @@ const verify2FALogin = async (req, res) => {
     // Get user
     const user = await User.findByEmail(email);
     if (!user) {
-      return res.status(401).json({ message: 'Invalid credentials' });
+      return res.status(401).json({ message: 'Tài khoản không tồn tại. Vui lòng kiểm tra lại email hoặc đăng ký tài khoản mới.' });
     }
 
     // Verify token
@@ -307,7 +307,7 @@ const verify2FALogin = async (req, res) => {
     });
 
     if (!verified) {
-      return res.status(401).json({ message: 'Invalid verification code' });
+      return res.status(401).json({ message: 'Mã xác thực không hợp lệ. Vui lòng kiểm tra lại mã trong ứng dụng xác thực của bạn.' });
     }
 
     // Generate JWT token

@@ -280,6 +280,14 @@ export const useCourtStore = defineStore('court', () => {
     try {
       const response = await courtService.getCourtsByOwner();
       courts.value = response.courts;
+
+      // Store the owner's courts in localStorage for security checks
+      try {
+        localStorage.setItem('owner_courts', JSON.stringify(response.courts));
+      } catch (e) {
+        console.error('Error storing owner courts in localStorage:', e);
+      }
+
       return response.courts;
     } catch (err: any) {
       error.value = typeof err === 'string' ? err : 'Failed to fetch owner courts';

@@ -1,8 +1,0 @@
-{
-  "auth": {
-    "resetPasswordTitle": "Đặt lại mật khẩu",
-    "resetPasswordDesc": "Vui lòng nhập mật khẩu mới của bạn",
-    "resetPasswordButton": "Đặt lại mật khẩu",
-    "newPassword": "Mật khẩu mới"
-  }
-}

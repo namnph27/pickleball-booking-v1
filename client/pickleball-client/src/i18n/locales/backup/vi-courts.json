@@ -1,0 +1,12 @@
+{
+  "courts": {
+    "bookNow": "Đặt ngay",
+    "availability": "Lịch trống",
+    "amenities": "Tiện nghi",
+    "location": "Vị trí",
+    "mapPlaceholder": "Bản đồ sẽ được hiển thị ở đây",
+    "noAvailabilityForDate": "Không có khung giờ nào cho ngày này",
+    "available": "Có sẵn",
+    "unavailable": "Không có sẵn"
+  }
+}

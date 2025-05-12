@@ -94,17 +94,8 @@ const onSubmit = handleSubmit(async () => {
 
     // Hiển thị thông báo lỗi chi tiết
     if (typeof error === 'string') {
-      // Xử lý các trường hợp lỗi đặc biệt
-      if (error === 'accountNotFound') {
-        // Đây là trường hợp tài khoản không tồn tại (đã bị xóa)
-        loginError.value = t('auth.accountNotFound');
-      } else if (error === 'Invalid credentials') {
-        // Trường hợp thông báo lỗi trực tiếp từ server
-        loginError.value = t('auth.invalidCredentials');
-      } else {
-        // Các lỗi khác
-        loginError.value = error;
-      }
+      // Hiển thị thông báo lỗi trực tiếp từ server
+      loginError.value = error;
     } else {
       // Mặc định
       loginError.value = t('auth.loginFailed');

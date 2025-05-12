@@ -3,21 +3,6 @@
     "minLength": "Must be at least {min} characters",
     "mustBePositive": "Value must be a positive number"
   },
-  "amenities": {
-    "parking": "Parking",
-    "restrooms": "Restrooms",
-    "waterFountain": "Water Fountain",
-    "lighting": "Lighting",
-    "showers": "Showers",
-    "lockers": "Lockers",
-    "proshop": "Pro Shop",
-    "restaurant": "Restaurant/Cafe",
-    "wifi": "Free Wi-Fi",
-    "airConditioning": "Air Conditioning",
-    "heater": "Heater",
-    "spectatorSeating": "Spectator Seating",
-    "equipmentRental": "Equipment Rental"
-  },
   "common": {
     "home": "Home",
     "courts": "Courts",
@@ -197,11 +182,7 @@
     "rememberPassword": "Remember your password?",
     "passwordResetSuccess": "Password reset successful",
     "passwordResetFailed": "Password reset failed. Please try again",
-    "logout": "Logout",
-    "resetPasswordTitle": "Reset Password",
-    "resetPasswordDesc": "Please enter your new password",
-    "resetPasswordButton": "Reset Password",
-    "newPassword": "New Password"
+    "logout": "Logout"
   },
   "courts": {
     "findCourts": "Find Pickleball Courts",
@@ -233,9 +214,7 @@
     "openHours": "Open Hours: {hours}",
     "maxPlayers": "Max {count} players",
     "name": "Court Name",
-    "description": "Court Description",
-    "mapPlaceholder": "Map will be displayed here",
-    "noAvailabilityForDate": "No availability for this date"
+    "description": "Court Description"
   },
   "booking": {
     "bookCourt": "Book Court",

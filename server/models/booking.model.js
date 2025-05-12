@@ -705,6 +705,31 @@ const Booking = {
     } catch (error) {
       throw error;
     }
+  },
+
+  /**
+   * Get bookings by court ID and date
+   * @param {number} courtId - Court ID
+   * @param {string} date - Date (YYYY-MM-DD)
+   * @returns {Promise<Array>} - Array of booking objects
+   */
+  async getByCourtAndDate(courtId, date) {
+    const query = `
+      SELECT *
+      FROM bookings
+      WHERE
+        court_id = $1 AND
+        DATE(start_time) = $2 AND
+        status != 'cancelled'
+      ORDER BY start_time
+    `;
+
+    try {
+      const result = await db.query(query, [courtId, date]);
+      return result.rows;
+    } catch (error) {
+      throw error;
+    }
   }
 };
 

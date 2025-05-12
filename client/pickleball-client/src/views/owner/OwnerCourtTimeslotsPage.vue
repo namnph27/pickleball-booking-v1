@@ -25,11 +25,17 @@ const toast = useToast();
 const courtId = computed(() => Number(route.params.id));
 const timeslots = ref<CourtTimeslot[]>([]);
 const loading = ref(false);
-const showAddModal = ref(false);
 const showEditModal = ref(false);
-const showDeleteModal = ref(false);
+const showCopyModal = ref(false);
+const showDeleteDateModal = ref(false);
 const isSubmitting = ref(false);
 const selectedTimeslot = ref<CourtTimeslot | null>(null);
+const copyFromDayOfWeek = ref(1); // Default to Monday
+
+// Check if there are specific date timeslots
+const hasSpecificDateTimeslots = computed(() => {
+  return timeslots.value.some(timeslot => timeslot.specific_date === selectedDate.value);
+});
 
 // Date selection
 const today = new Date();
@@ -170,7 +176,7 @@ const formatPrice = (price: number) => {
   return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(price || 0);
 };
 
-// Open add/edit modal for a specific timeslot
+// Open edit modal for a specific timeslot
 const openTimeslotModal = (timeslot: any) => {
   selectedTimeslot.value = timeslot;
 
@@ -181,34 +187,7 @@ const openTimeslotModal = (timeslot: any) => {
   price.value = timeslot.price || 0;
   isAvailable.value = timeslot.is_available;
 
-  if (timeslot.isPlaceholder) {
-    showAddModal.value = true;
-  } else {
-    showEditModal.value = true;
-  }
-};
-
-// Open add modal
-const openAddModal = () => {
-  // Reset form
-  dayOfWeek.value = selectedDayOfWeek.value;
-  startTime.value = '';
-  endTime.value = '';
-  price.value = 0;
-  isAvailable.value = true;
-
-  showAddModal.value = true;
-};
-
-// Add for specific day
-const addForDay = (day: number) => {
-  dayOfWeek.value = day;
-  startTime.value = '';
-  endTime.value = '';
-  price.value = 0;
-  isAvailable.value = true;
-
-  showAddModal.value = true;
+  showEditModal.value = true;
 };
 
 // Open edit modal
@@ -225,44 +204,6 @@ const openEditModal = (timeslot: CourtTimeslot) => {
   showEditModal.value = true;
 };
 
-// Open delete modal
-const openDeleteModal = (timeslot: CourtTimeslot) => {
-  selectedTimeslot.value = timeslot;
-  showDeleteModal.value = true;
-};
-
-// Add timeslot
-const addTimeslot = async () => {
-  if (!startTime.value || !endTime.value) {
-    toast.error(t('courtOwner.timeslotTimeRequired'));
-    return;
-  }
-
-  isSubmitting.value = true;
-
-  try {
-    const timeslotData = {
-      day_of_week: dayOfWeek.value,
-      start_time: startTime.value,
-      end_time: endTime.value,
-      price: Number(price.value),
-      is_available: isAvailable.value
-    };
-
-    await courtService.createTimeslot(courtId.value, timeslotData);
-
-    toast.success(t('courtOwner.timeslotAdded'));
-    showAddModal.value = false;
-
-    // Refresh timeslots
-    fetchTimeslots();
-  } catch (error) {
-    toast.error(typeof error === 'string' ? error : t('courtOwner.timeslotAddError'));
-  } finally {
-    isSubmitting.value = false;
-  }
-};
-
 // Update timeslot
 const updateTimeslot = async () => {
   if (!selectedTimeslot.value || !startTime.value || !endTime.value) {
@@ -273,12 +214,17 @@ const updateTimeslot = async () => {
   isSubmitting.value = true;
 
   try {
+    // Get the day of week from the selected date
+    const date = new Date(selectedDate.value);
+    const dayOfWeekFromDate = date.getDay();
+
     const timeslotData = {
-      day_of_week: dayOfWeek.value,
+      day_of_week: dayOfWeekFromDate,
       start_time: startTime.value,
       end_time: endTime.value,
       price: Number(price.value),
-      is_available: isAvailable.value
+      is_available: isAvailable.value,
+      specific_date: selectedDate.value
     };
 
     await courtService.updateTimeslot(courtId.value, selectedTimeslot.value.id, timeslotData);
@@ -295,45 +241,12 @@ const updateTimeslot = async () => {
   }
 };
 
-// Delete timeslot
-const deleteTimeslot = async () => {
-  if (!selectedTimeslot.value) return;
-
-  isSubmitting.value = true;
-
-  try {
-    await courtService.deleteTimeslot(courtId.value, selectedTimeslot.value.id);
-
-    toast.success(t('courtOwner.timeslotDeleted'));
-    showDeleteModal.value = false;
-
-    // Refresh timeslots
-    fetchTimeslots();
-  } catch (error) {
-    toast.error(typeof error === 'string' ? error : t('courtOwner.timeslotDeleteError'));
-  } finally {
-    isSubmitting.value = false;
-  }
-};
-
 // Toggle timeslot availability
 const toggleAvailability = async (timeslot: CourtTimeslot) => {
   try {
-    // If it's a placeholder, we need to create it first
-    if ((timeslot as any).isPlaceholder) {
-      const timeslotData = {
-        day_of_week: timeslot.day_of_week,
-        start_time: timeslot.start_time,
-        end_time: timeslot.end_time,
-        price: Number(timeslot.price),
-        is_available: false // Start as unavailable since we're toggling from the default available state
-      };
-
-      await courtService.createTimeslot(courtId.value, timeslotData);
-      toast.success(t('courtOwner.timeslotMarkedUnavailable'));
-    } else {
+    // If it's not a placeholder and has an ID, just update it directly
+    if (!(timeslot as any).isPlaceholder && timeslot.id) {
       await courtService.updateTimeslot(courtId.value, timeslot.id, {
-        ...timeslot,
         is_available: !timeslot.is_available
       });
 
@@ -342,6 +255,54 @@ const toggleAvailability = async (timeslot: CourtTimeslot) => {
           ? t('courtOwner.timeslotMarkedUnavailable')
           : t('courtOwner.timeslotMarkedAvailable')
       );
+
+      // Refresh timeslots
+      fetchTimeslots();
+      return;
+    }
+
+    // For placeholders or default timeslots, we need to check if a specific date override exists
+    try {
+      // First check if a specific date override already exists
+      const response = await courtService.getTimeslotsByDate(courtId.value, selectedDate.value);
+
+      // Find exact match for this timeslot
+      const existingTimeslot = response.timeslots.find(
+        ts =>
+          ts.start_time === timeslot.start_time &&
+          ts.end_time === timeslot.end_time &&
+          ts.specific_date === selectedDate.value
+      );
+
+      if (existingTimeslot) {
+        // Update existing specific date timeslot
+        await courtService.updateTimeslot(courtId.value, existingTimeslot.id, {
+          is_available: !existingTimeslot.is_available
+        });
+
+        toast.success(
+          existingTimeslot.is_available
+            ? t('courtOwner.timeslotMarkedUnavailable')
+            : t('courtOwner.timeslotMarkedAvailable')
+        );
+      } else {
+        // Create new specific date override
+        const timeslotData = {
+          court_id: courtId.value,
+          day_of_week: timeslot.day_of_week,
+          start_time: timeslot.start_time,
+          end_time: timeslot.end_time,
+          price: Number(timeslot.price || 0),
+          is_available: false, // Always start as unavailable when creating from placeholder
+          specific_date: selectedDate.value
+        };
+
+        await courtService.createTimeslot(courtId.value, timeslotData);
+        toast.success(t('courtOwner.timeslotMarkedUnavailable'));
+      }
+    } catch (error) {
+      console.error('Error toggling availability:', error);
+      throw error;
     }
 
     // Refresh timeslots
@@ -354,26 +315,56 @@ const toggleAvailability = async (timeslot: CourtTimeslot) => {
 // Quick update price
 const quickUpdatePrice = async (timeslot: any, newPrice: number) => {
   try {
-    if (timeslot.isPlaceholder) {
-      // Create new timeslot with the specified price
-      const timeslotData = {
-        day_of_week: timeslot.day_of_week,
-        start_time: timeslot.start_time,
-        end_time: timeslot.end_time,
-        price: newPrice,
-        is_available: true
-      };
-
-      await courtService.createTimeslot(courtId.value, timeslotData);
-      toast.success(t('courtOwner.timeslotAdded'));
-    } else {
-      // Update existing timeslot
+    // If it's not a placeholder and has an ID, just update it directly
+    if (!timeslot.isPlaceholder && timeslot.id) {
       await courtService.updateTimeslot(courtId.value, timeslot.id, {
-        ...timeslot,
         price: newPrice
       });
 
       toast.success(t('courtOwner.timeslotUpdated'));
+
+      // Refresh timeslots
+      fetchTimeslots();
+      return;
+    }
+
+    // For placeholders or default timeslots, we need to check if a specific date override exists
+    try {
+      // First check if a specific date override already exists
+      const response = await courtService.getTimeslotsByDate(courtId.value, selectedDate.value);
+
+      // Find exact match for this timeslot
+      const existingTimeslot = response.timeslots.find(
+        ts =>
+          ts.start_time === timeslot.start_time &&
+          ts.end_time === timeslot.end_time &&
+          ts.specific_date === selectedDate.value
+      );
+
+      if (existingTimeslot) {
+        // Update existing specific date timeslot
+        await courtService.updateTimeslot(courtId.value, existingTimeslot.id, {
+          price: newPrice
+        });
+        toast.success(t('courtOwner.timeslotUpdated'));
+      } else {
+        // Create new specific date override
+        const timeslotData = {
+          court_id: courtId.value,
+          day_of_week: timeslot.day_of_week,
+          start_time: timeslot.start_time,
+          end_time: timeslot.end_time,
+          price: newPrice,
+          is_available: timeslot.is_available,
+          specific_date: selectedDate.value
+        };
+
+        await courtService.createTimeslot(courtId.value, timeslotData);
+        toast.success(t('courtOwner.timeslotAdded'));
+      }
+    } catch (error) {
+      console.error('Error updating price:', error);
+      throw error;
     }
 
     // Refresh timeslots
@@ -383,17 +374,82 @@ const quickUpdatePrice = async (timeslot: any, newPrice: number) => {
   }
 };
 
-// Fetch court timeslots
+// Fetch court timeslots for the selected date
 const fetchTimeslots = async () => {
   loading.value = true;
 
   try {
-    const response = await courtService.getCourtTimeslots(courtId.value);
+    // Get timeslots for the selected date
+    const response = await courtService.getTimeslotsByDate(courtId.value, selectedDate.value);
     timeslots.value = response.timeslots;
   } catch (error) {
     toast.error(typeof error === 'string' ? error : t('courtOwner.timeslotsFetchError'));
   } finally {
     loading.value = false;
+  }
+};
+
+// Watch for date changes to reload timeslots
+watch(selectedDate, () => {
+  fetchTimeslots();
+});
+
+// Open copy modal
+const openCopyModal = () => {
+  // Set default day of week to the selected date's day of week
+  const date = new Date(selectedDate.value);
+  copyFromDayOfWeek.value = date.getDay();
+  showCopyModal.value = true;
+};
+
+// Open delete date modal
+const openDeleteDateModal = () => {
+  showDeleteDateModal.value = true;
+};
+
+// Copy timeslots from day of week to specific date
+const copyTimeslots = async () => {
+  isSubmitting.value = true;
+
+  try {
+    await courtService.copyDayOfWeekTimeslotsToDate(
+      courtId.value,
+      copyFromDayOfWeek.value,
+      selectedDate.value
+    );
+
+    toast.success(t('courtOwner.timeslotsCopied'));
+    showCopyModal.value = false;
+
+    // Refresh timeslots
+    fetchTimeslots();
+  } catch (error) {
+    if (typeof error === 'object' && error !== null && 'timeslots' in error) {
+      toast.error(t('courtOwner.timeslotsAlreadyExist'));
+    } else {
+      toast.error(typeof error === 'string' ? error : t('courtOwner.timeslotsCopyError'));
+    }
+  } finally {
+    isSubmitting.value = false;
+  }
+};
+
+// Delete all timeslots for a specific date
+const deleteAllTimeslotsForDate = async () => {
+  isSubmitting.value = true;
+
+  try {
+    await courtService.deleteTimeslotsByDate(courtId.value, selectedDate.value);
+
+    toast.success(t('courtOwner.timeslotsDeleted'));
+    showDeleteDateModal.value = false;
+
+    // Refresh timeslots
+    fetchTimeslots();
+  } catch (error) {
+    toast.error(typeof error === 'string' ? error : t('courtOwner.timeslotsDeleteError'));
+  } finally {
+    isSubmitting.value = false;
   }
 };
 
@@ -423,12 +479,7 @@ onMounted(async () => {
   >
     <!-- Header Actions -->
     <template #headerActions>
-      <BaseButton
-        :label="t('courtOwner.addTimeslot')"
-        variant="primary"
-        icon="pi-plus"
-        @click="openAddModal"
-      />
+      <!-- No add timeslot button as timeslots are system-defined -->
     </template>
 
     <!-- Main Content -->
@@ -450,11 +501,29 @@ onMounted(async () => {
           />
         </div>
 
+        <div class="date-actions">
+          <BaseButton
+            :label="t('courtOwner.copyFromDayOfWeek')"
+            variant="outline"
+            icon="pi-copy"
+            @click="openCopyModal"
+          />
+
+          <BaseButton
+            v-if="hasSpecificDateTimeslots"
+            :label="t('courtOwner.deleteAllForDate')"
+            variant="danger"
+            icon="pi-trash"
+            @click="openDeleteDateModal"
+          />
+        </div>
+
         <div class="timeslots-header">
           <h3 class="section-title">{{ t('courtOwner.timeslots') }}</h3>
           <p class="section-subtitle">
             {{ t('courtOwner.timeslotsDescription') }}
           </p>
+          <BaseAlert type="info" message="Các khung giờ được hệ thống hiển thị ở trang này là mặc định và chủ sân sẽ không thể thay đổi được. Chủ sân chỉ có thể cập nhật giá sân, đóng hoặc mở các khung giờ." />
         </div>
 
         <!-- Fixed Timeslots Grid -->
@@ -509,89 +578,14 @@ onMounted(async () => {
                 <i :class="`pi ${timeslot.is_available ? 'pi-eye-slash' : 'pi-eye'}`"></i>
               </button>
 
-              <button
-                v-if="!timeslot.isPlaceholder"
-                class="action-button action-button--danger"
-                @click="openDeleteModal(timeslot)"
-                title="Delete"
-              >
-                <i class="pi pi-trash"></i>
-              </button>
+              <!-- Delete button removed as timeslots are system-defined -->
             </div>
           </BaseCard>
         </div>
       </div>
     </div>
 
-    <!-- Add Timeslot Modal -->
-    <BaseModal
-      :modelValue="showAddModal"
-      @update:modelValue="showAddModal = $event"
-      :title="t('courtOwner.addTimeslot')"
-      :ok-text="t('courtOwner.addTimeslot')"
-      :cancel-text="t('common.cancel')"
-      :loading="isSubmitting"
-      @ok="addTimeslot"
-    >
-      <div class="timeslot-form">
-        <div class="form-group">
-          <BaseSelect
-            :modelValue="dayOfWeek"
-            @update:modelValue="dayOfWeek = $event"
-            :label="t('courtOwner.dayOfWeek')"
-            :options="dayOptions"
-            required
-          />
-        </div>
-
-        <div class="form-row">
-          <div class="form-group">
-            <BaseInput
-              :modelValue="startTime"
-              @update:modelValue="startTime = $event"
-              type="time"
-              :label="t('courtOwner.startTime')"
-              required
-            />
-          </div>
-
-          <div class="form-group">
-            <BaseInput
-              :modelValue="endTime"
-              @update:modelValue="endTime = $event"
-              type="time"
-              :label="t('courtOwner.endTime')"
-              required
-            />
-          </div>
-        </div>
-
-        <div class="form-group">
-          <BaseInput
-            :modelValue="price"
-            @update:modelValue="price = $event"
-            type="number"
-            :label="t('courts.price')"
-            :placeholder="t('courtOwner.pricePlaceholder')"
-            min="0"
-            step="10000"
-          />
-        </div>
-
-        <div class="form-group">
-          <div class="checkbox-group">
-            <label class="checkbox-label">
-              <input
-                type="checkbox"
-                :checked="isAvailable"
-                @change="isAvailable = $event.target.checked"
-              />
-              <span>{{ t('courtOwner.timeslotAvailable') }}</span>
-            </label>
-          </div>
-        </div>
-      </div>
-    </BaseModal>
+    <!-- Add Timeslot Modal removed as timeslots are system-defined -->
 
     <!-- Edit Timeslot Modal -->
     <BaseModal
@@ -663,32 +657,61 @@ onMounted(async () => {
       </div>
     </BaseModal>
 
-    <!-- Delete Timeslot Modal -->
+    <!-- Delete Timeslot Modal removed as timeslots are system-defined -->
+
+    <!-- Copy Timeslots Modal -->
     <BaseModal
-      :modelValue="showDeleteModal"
-      @update:modelValue="showDeleteModal = $event"
-      :title="t('courtOwner.deleteTimeslot')"
+      :modelValue="showCopyModal"
+      @update:modelValue="showCopyModal = $event"
+      :title="t('courtOwner.copyTimeslots')"
+      :ok-text="t('courtOwner.copyTimeslots')"
+      :cancel-text="t('common.cancel')"
+      :loading="isSubmitting"
+      @ok="copyTimeslots"
+    >
+      <div class="copy-timeslots-form">
+        <p>{{ t('courtOwner.copyTimeslotsDescription') }}</p>
+
+        <div class="form-group">
+          <BaseSelect
+            :modelValue="copyFromDayOfWeek"
+            @update:modelValue="copyFromDayOfWeek = $event"
+            :label="t('courtOwner.copyFromDayOfWeek')"
+            :options="dayOptions"
+            required
+          />
+        </div>
+
+        <div class="form-group">
+          <div class="date-display">
+            <span class="date-label">{{ t('courtOwner.copyToDate') }}:</span>
+            <span class="date-value">{{ selectedDate }}</span>
+          </div>
+        </div>
+
+        <BaseAlert type="info" :message="t('courtOwner.copyTimeslotsInfo')" />
+      </div>
+    </BaseModal>
+
+    <!-- Delete Date Timeslots Modal -->
+    <BaseModal
+      :modelValue="showDeleteDateModal"
+      @update:modelValue="showDeleteDateModal = $event"
+      :title="t('courtOwner.deleteAllForDate')"
       :ok-text="t('courtOwner.confirmDelete')"
       :cancel-text="t('common.cancel')"
       ok-variant="danger"
       :loading="isSubmitting"
-      @ok="deleteTimeslot"
+      @ok="deleteAllTimeslotsForDate"
     >
-      <BaseAlert type="warning" :message="t('courtOwner.deleteTimeslotWarning')" />
+      <BaseAlert type="warning" :message="t('courtOwner.deleteAllForDateWarning')" />
 
-      <div v-if="selectedTimeslot" class="delete-confirmation">
-        <p>{{ t('courtOwner.deleteTimeslotConfirmation') }}</p>
+      <div class="delete-confirmation">
+        <p>{{ t('courtOwner.deleteAllForDateConfirmation') }}</p>
 
-        <div class="timeslot-details">
-          <div class="detail-item">
-            <span class="detail-label">{{ t('courtOwner.dayOfWeek') }}:</span>
-            <span class="detail-value">{{ dayOptions.find(d => d.value === selectedTimeslot.day_of_week)?.label }}</span>
-          </div>
-
-          <div class="detail-item">
-            <span class="detail-label">{{ t('courtOwner.time') }}:</span>
-            <span class="detail-value">{{ formatTime(selectedTimeslot.start_time) }} - {{ formatTime(selectedTimeslot.end_time) }}</span>
-          </div>
+        <div class="date-display">
+          <span class="date-label">{{ t('courtOwner.date') }}:</span>
+          <span class="date-value">{{ selectedDate }}</span>
         </div>
       </div>
     </BaseModal>
@@ -718,6 +741,12 @@ onMounted(async () => {
 
   .date-selector {
     max-width: 500px;
+    margin-bottom: 1rem;
+  }
+
+  .date-actions {
+    display: flex;
+    gap: 1rem;
     margin-bottom: 2rem;
   }
 
@@ -725,6 +754,28 @@ onMounted(async () => {
     margin-bottom: 1rem;
     border-bottom: 1px solid var(--light-gray);
     padding-bottom: 0.5rem;
+  }
+
+  .date-display {
+    background-color: var(--light-gray);
+    padding: 0.75rem;
+    border-radius: 4px;
+    margin: 1rem 0;
+
+    .date-label {
+      font-weight: 500;
+      margin-right: 0.5rem;
+    }
+
+    .date-value {
+      font-weight: 600;
+    }
+  }
+
+  .copy-timeslots-form {
+    p {
+      margin-bottom: 1rem;
+    }
   }
 }
 

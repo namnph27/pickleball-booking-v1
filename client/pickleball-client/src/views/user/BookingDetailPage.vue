@@ -53,10 +53,26 @@ const formatTime = (timeString: string) => {
   return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 };
 
+// Get court image with proper URL
+const getCourtImage = (imageUrl: string) => {
+  if (imageUrl) {
+    // If image URL starts with /uploads, it's a server-side image
+    if (imageUrl.startsWith('/uploads')) {
+      // Use the API URL from environment variables
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+      return `${apiUrl}${imageUrl}`;
+    }
+    return imageUrl;
+  }
+
+  // Fallback to default image
+  return '/images/default-court.jpg';
+};
+
 // Calculate duration in hours
 const getDuration = () => {
   if (!booking.value) return 0;
-  
+
   const start = new Date(booking.value.start_time);
   const end = new Date(booking.value.end_time);
   const durationMs = end.getTime() - start.getTime();
@@ -87,9 +103,9 @@ const openCancelModal = () => {
 // Cancel booking
 const cancelBooking = async () => {
   if (!booking.value) return;
-  
+
   isCancelling.value = true;
-  
+
   try {
     await bookingStore.cancelBooking(booking.value.id);
     toast.success(t('booking.cancelSuccess'));
@@ -109,7 +125,7 @@ const openPaymentModal = () => {
 // Process payment
 const processPayment = async () => {
   if (!booking.value) return;
-  
+
   // Validate payment details
   if (paymentMethod.value === 'credit_card' || paymentMethod.value === 'debit_card') {
     if (!cardNumber.value || !cardHolder.value || !expiryDate.value || !cvv.value) {
@@ -117,9 +133,9 @@ const processPayment = async () => {
       return;
     }
   }
-  
+
   isProcessingPayment.value = true;
-  
+
   try {
     const paymentData = {
       booking_id: booking.value.id,
@@ -129,12 +145,12 @@ const processPayment = async () => {
       expiry_date: expiryDate.value,
       cvv: cvv.value
     };
-    
+
     await bookingStore.processPayment(paymentData);
-    
+
     toast.success(t('booking.paymentSuccessful'));
     showPaymentModal.value = false;
-    
+
     // Refresh booking details
     await bookingStore.getBookingById(booking.value.id);
   } catch (error) {
@@ -150,7 +166,7 @@ onMounted(async () => {
     router.push('/bookings');
     return;
   }
-  
+
   try {
     await bookingStore.getBookingById(bookingId.value);
   } catch (error) {
@@ -161,8 +177,8 @@ onMounted(async () => {
 </script>
 
 <template>
-  <BaseLayout 
-    :title="t('booking.bookingDetails')" 
+  <BaseLayout
+    :title="t('booking.bookingDetails')"
     :back-link="'/bookings'"
     :loading="loading"
   >
@@ -178,18 +194,18 @@ onMounted(async () => {
                   {{ t(`booking.${booking.status}`) }}
                 </span>
               </div>
-              
+
               <div class="booking-actions">
-                <BaseButton 
+                <BaseButton
                   v-if="booking.status !== 'cancelled' && booking.status !== 'completed'"
-                  :label="t('booking.cancelBooking')" 
+                  :label="t('booking.cancelBooking')"
                   variant="danger"
                   @click="openCancelModal"
                 />
-                
-                <BaseButton 
+
+                <BaseButton
                   v-if="booking.status === 'pending'"
-                  :label="t('booking.payNow')" 
+                  :label="t('booking.payNow')"
                   variant="primary"
                   @click="openPaymentModal"
                 />
@@ -197,7 +213,7 @@ onMounted(async () => {
             </div>
           </BaseCard>
         </div>
-        
+
         <div class="booking-content">
           <!-- Court Details -->
           <div class="booking-section">
@@ -205,22 +221,22 @@ onMounted(async () => {
               <template #header>
                 <h3 class="section-title">{{ t('courts.courtDetails') }}</h3>
               </template>
-              
+
               <div class="court-info">
                 <div v-if="booking.image_url" class="court-image">
-                  <img :src="booking.image_url" :alt="booking.court_name" />
+                  <img :src="getCourtImage(booking.image_url)" :alt="booking.court_name" />
                 </div>
-                
+
                 <div class="court-details">
                   <h3 class="court-name">{{ booking.court_name }}</h3>
-                  
+
                   <div class="info-item">
                     <i class="pi pi-map-marker"></i>
                     <span>{{ booking.location }}</span>
                   </div>
-                  
-                  <BaseButton 
-                    :label="t('courts.viewCourt')" 
+
+                  <BaseButton
+                    :label="t('courts.viewCourt')"
                     variant="outline"
                     icon="pi-external-link"
                     @click="router.push(`/courts/${booking.court_id}`)"
@@ -229,35 +245,35 @@ onMounted(async () => {
               </div>
             </BaseCard>
           </div>
-          
+
           <!-- Booking Details -->
           <div class="booking-section">
             <BaseCard>
               <template #header>
                 <h3 class="section-title">{{ t('booking.bookingDetails') }}</h3>
               </template>
-              
+
               <div class="booking-info">
                 <div class="info-row">
                   <div class="info-label">{{ t('booking.bookingDate') }}</div>
                   <div class="info-value">{{ formatDate(booking.start_time) }}</div>
                 </div>
-                
+
                 <div class="info-row">
                   <div class="info-label">{{ t('booking.bookingTime') }}</div>
                   <div class="info-value">{{ formatTime(booking.start_time) }} - {{ formatTime(booking.end_time) }}</div>
                 </div>
-                
+
                 <div class="info-row">
                   <div class="info-label">{{ t('booking.duration') }}</div>
                   <div class="info-value">{{ getDuration() }} {{ t('booking.hours') }}</div>
                 </div>
-                
+
                 <div class="info-row">
                   <div class="info-label">{{ t('booking.totalPrice') }}</div>
                   <div class="info-value">${{ booking.total_price.toFixed(2) }}</div>
                 </div>
-                
+
                 <div class="info-row">
                   <div class="info-label">{{ t('booking.paymentStatus') }}</div>
                   <div class="info-value">
@@ -266,7 +282,7 @@ onMounted(async () => {
                     </span>
                   </div>
                 </div>
-                
+
                 <div class="info-row">
                   <div class="info-label">{{ t('booking.bookedOn') }}</div>
                   <div class="info-value">{{ formatDate(booking.created_at) }}</div>
@@ -275,36 +291,36 @@ onMounted(async () => {
             </BaseCard>
           </div>
         </div>
-        
+
         <!-- Additional Information -->
         <div class="booking-section">
           <BaseCard>
             <template #header>
               <h3 class="section-title">{{ t('booking.additionalInfo') }}</h3>
             </template>
-            
+
             <div class="additional-info">
-              <BaseAlert 
-                v-if="booking.status === 'confirmed'" 
+              <BaseAlert
+                v-if="booking.status === 'confirmed'"
                 type="success"
                 :title="t('booking.readyToPlay')"
                 :message="t('booking.arriveEarly')"
               />
-              
-              <BaseAlert 
-                v-else-if="booking.status === 'pending'" 
+
+              <BaseAlert
+                v-else-if="booking.status === 'pending'"
                 type="warning"
                 :title="t('booking.pendingPayment')"
                 :message="t('booking.completePayment')"
               />
-              
-              <BaseAlert 
-                v-else-if="booking.status === 'cancelled'" 
+
+              <BaseAlert
+                v-else-if="booking.status === 'cancelled'"
                 type="error"
                 :title="t('booking.bookingCancelled')"
                 :message="t('booking.bookAgain')"
               />
-              
+
               <div class="cancellation-policy">
                 <h4>{{ t('booking.cancellationPolicy') }}</h4>
                 <ul>
@@ -318,7 +334,7 @@ onMounted(async () => {
         </div>
       </div>
     </template>
-    
+
     <!-- Cancel Booking Modal -->
     <BaseModal
       v-model="showCancelModal"
@@ -330,7 +346,7 @@ onMounted(async () => {
       @ok="cancelBooking"
     >
       <BaseAlert type="warning" :message="t('booking.cancelWarning')" />
-      
+
       <div class="cancellation-policy">
         <h4>{{ t('booking.cancellationPolicy') }}</h4>
         <ul>
@@ -340,7 +356,7 @@ onMounted(async () => {
         </ul>
       </div>
     </BaseModal>
-    
+
     <!-- Payment Modal -->
     <BaseModal
       v-model="showPaymentModal"
@@ -353,113 +369,113 @@ onMounted(async () => {
       <div class="payment-modal-content">
         <div class="booking-summary">
           <h3>{{ t('booking.bookingDetails') }}</h3>
-          
+
           <div class="summary-info">
             <div class="info-row">
               <span class="info-label">{{ t('courts.court') }}:</span>
               <span class="info-value">{{ booking?.court_name }}</span>
             </div>
-            
+
             <div class="info-row">
               <span class="info-label">{{ t('booking.bookingDate') }}:</span>
               <span class="info-value">{{ formatDate(booking?.start_time || '') }}</span>
             </div>
-            
+
             <div class="info-row">
               <span class="info-label">{{ t('booking.bookingTime') }}:</span>
               <span class="info-value">{{ formatTime(booking?.start_time || '') }} - {{ formatTime(booking?.end_time || '') }}</span>
             </div>
-            
+
             <div class="info-row">
               <span class="info-label">{{ t('booking.totalPrice') }}:</span>
               <span class="info-value">${{ booking?.total_price.toFixed(2) }}</span>
             </div>
           </div>
         </div>
-        
+
         <div class="payment-form">
           <h3>{{ t('booking.paymentMethod') }}</h3>
-          
+
           <div class="payment-methods">
             <div class="payment-method-option">
-              <input 
-                type="radio" 
-                id="credit-card" 
-                value="credit_card" 
+              <input
+                type="radio"
+                id="credit-card"
+                value="credit_card"
                 v-model="paymentMethod"
               />
               <label for="credit-card">{{ t('booking.creditCard') }}</label>
             </div>
-            
+
             <div class="payment-method-option">
-              <input 
-                type="radio" 
-                id="debit-card" 
-                value="debit_card" 
+              <input
+                type="radio"
+                id="debit-card"
+                value="debit_card"
                 v-model="paymentMethod"
               />
               <label for="debit-card">{{ t('booking.debitCard') }}</label>
             </div>
-            
+
             <div class="payment-method-option">
-              <input 
-                type="radio" 
-                id="paypal" 
-                value="paypal" 
+              <input
+                type="radio"
+                id="paypal"
+                value="paypal"
                 v-model="paymentMethod"
               />
               <label for="paypal">{{ t('booking.paypal') }}</label>
             </div>
           </div>
-          
+
           <div v-if="paymentMethod === 'credit_card' || paymentMethod === 'debit_card'" class="card-details">
             <div class="form-group">
               <label for="card-number">{{ t('booking.cardNumber') }}</label>
-              <input 
-                type="text" 
-                id="card-number" 
-                v-model="cardNumber" 
+              <input
+                type="text"
+                id="card-number"
+                v-model="cardNumber"
                 placeholder="1234 5678 9012 3456"
                 class="form-input"
               />
             </div>
-            
+
             <div class="form-group">
               <label for="card-holder">{{ t('booking.cardHolder') }}</label>
-              <input 
-                type="text" 
-                id="card-holder" 
-                v-model="cardHolder" 
+              <input
+                type="text"
+                id="card-holder"
+                v-model="cardHolder"
                 placeholder="John Doe"
                 class="form-input"
               />
             </div>
-            
+
             <div class="form-row">
               <div class="form-group">
                 <label for="expiry-date">{{ t('booking.expiryDate') }}</label>
-                <input 
-                  type="text" 
-                  id="expiry-date" 
-                  v-model="expiryDate" 
+                <input
+                  type="text"
+                  id="expiry-date"
+                  v-model="expiryDate"
                   placeholder="MM/YY"
                   class="form-input"
                 />
               </div>
-              
+
               <div class="form-group">
                 <label for="cvv">{{ t('booking.cvv') }}</label>
-                <input 
-                  type="password" 
-                  id="cvv" 
-                  v-model="cvv" 
+                <input
+                  type="password"
+                  id="cvv"
+                  v-model="cvv"
                   placeholder="123"
                   class="form-input"
                 />
               </div>
             </div>
           </div>
-          
+
           <div v-else-if="paymentMethod === 'paypal'" class="paypal-info">
             <BaseAlert type="info">
               {{ t('booking.redirectToPaypal') }}
@@ -486,47 +502,47 @@ onMounted(async () => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  
+
   .status-info {
     display: flex;
     align-items: center;
     gap: 1rem;
-    
+
     .booking-id {
       font-size: 1.25rem;
       font-weight: 600;
       margin: 0;
     }
-    
+
     .status-badge {
       display: inline-block;
       padding: 0.25rem 0.75rem;
       border-radius: 4px;
       font-size: 0.875rem;
       font-weight: 500;
-      
+
       &.status-confirmed {
         background-color: rgba(76, 175, 80, 0.1);
         color: #2e7d32;
       }
-      
+
       &.status-pending {
         background-color: rgba(255, 152, 0, 0.1);
         color: #ef6c00;
       }
-      
+
       &.status-cancelled {
         background-color: rgba(244, 67, 54, 0.1);
         color: #c62828;
       }
-      
+
       &.status-completed {
         background-color: rgba(33, 150, 243, 0.1);
         color: #0277bd;
       }
     }
   }
-  
+
   .booking-actions {
     display: flex;
     gap: 1rem;
@@ -548,37 +564,37 @@ onMounted(async () => {
 .court-info {
   display: flex;
   gap: 1.5rem;
-  
+
   .court-image {
     width: 120px;
     height: 120px;
     border-radius: 8px;
     overflow: hidden;
-    
+
     img {
       width: 100%;
       height: 100%;
       object-fit: cover;
     }
   }
-  
+
   .court-details {
     flex: 1;
     display: flex;
     flex-direction: column;
     gap: 0.75rem;
-    
+
     .court-name {
       font-size: 1.25rem;
       font-weight: 600;
       margin: 0;
     }
-    
+
     .info-item {
       display: flex;
       align-items: center;
       gap: 0.5rem;
-      
+
       i {
         color: var(--primary-color);
       }
@@ -590,27 +606,27 @@ onMounted(async () => {
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
-  
+
   .info-row {
     display: flex;
     justify-content: space-between;
-    
+
     .info-label {
       font-weight: 500;
     }
-    
+
     .payment-status {
       display: inline-block;
       padding: 0.25rem 0.5rem;
       border-radius: 4px;
       font-size: 0.75rem;
       font-weight: 500;
-      
+
       &.status-paid {
         background-color: rgba(76, 175, 80, 0.1);
         color: #2e7d32;
       }
-      
+
       &.status-pending {
         background-color: rgba(255, 152, 0, 0.1);
         color: #ef6c00;
@@ -622,16 +638,16 @@ onMounted(async () => {
 .additional-info {
   .cancellation-policy {
     margin-top: 1.5rem;
-    
+
     h4 {
       font-size: 1rem;
       font-weight: 600;
       margin-bottom: 0.75rem;
     }
-    
+
     ul {
       padding-left: 1.5rem;
-      
+
       li {
         margin-bottom: 0.5rem;
         color: var(--dark-gray);
@@ -643,74 +659,74 @@ onMounted(async () => {
 .payment-modal-content {
   .booking-summary {
     margin-bottom: 1.5rem;
-    
+
     h3 {
       font-size: 1.125rem;
       font-weight: 600;
       margin: 0 0 1rem 0;
     }
-    
+
     .summary-info {
       display: flex;
       flex-direction: column;
       gap: 0.5rem;
-      
+
       .info-row {
         display: flex;
         justify-content: space-between;
-        
+
         .info-label {
           font-weight: 500;
         }
       }
     }
   }
-  
+
   .payment-form {
     h3 {
       font-size: 1.125rem;
       font-weight: 600;
       margin: 1.5rem 0 1rem 0;
     }
-    
+
     .payment-methods {
       display: flex;
       flex-direction: column;
       gap: 0.75rem;
       margin-bottom: 1.5rem;
-      
+
       .payment-method-option {
         display: flex;
         align-items: center;
         gap: 0.5rem;
       }
     }
-    
+
     .card-details {
       .form-group {
         margin-bottom: 1rem;
-        
+
         label {
           display: block;
           font-size: 0.875rem;
           font-weight: 500;
           margin-bottom: 0.5rem;
         }
-        
+
         .form-input {
           width: 100%;
           padding: 0.75rem;
           border: 1px solid var(--medium-gray);
           border-radius: 4px;
           font-size: 1rem;
-          
+
           &:focus {
             outline: none;
             border-color: var(--primary-color);
           }
         }
       }
-      
+
       .form-row {
         display: grid;
         grid-template-columns: 1fr 1fr;
@@ -731,22 +747,22 @@ onMounted(async () => {
     flex-direction: column;
     align-items: flex-start;
     gap: 1rem;
-    
+
     .booking-actions {
       width: 100%;
       flex-direction: column;
     }
   }
-  
+
   .court-info {
     flex-direction: column;
-    
+
     .court-image {
       width: 100%;
       height: 200px;
     }
   }
-  
+
   .payment-modal-content {
     .card-details {
       .form-row {

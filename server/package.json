@@ -14,6 +14,7 @@
     "update-join-court-db": "node scripts/update-join-court-feature.js",
     "create-admin": "node scripts/create-admin.js",
     "reset-admin": "node scripts/reset-admin-password.js",
+    "delete-sample-data": "node scripts/delete-sample-data.js",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:performance": "node tests/performance/booking-performance.test.js",

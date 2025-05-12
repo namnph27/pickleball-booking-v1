@@ -344,6 +344,33 @@ router.beforeEach((to, from, next) => {
     return;
   }
 
+  // Additional security check for court owner routes
+  if (to.path.includes('/owner/courts/') && isAuthenticated && user && user.role === 'court_owner') {
+    // Extract court ID from path
+    const matches = to.path.match(/\/owner\/courts\/(\d+)/);
+    if (matches && matches[1]) {
+      const courtId = parseInt(matches[1]);
+
+      // Get courts owned by the user from localStorage or store
+      let userCourts = [];
+      try {
+        const storedCourts = localStorage.getItem('owner_courts');
+        if (storedCourts) {
+          userCourts = JSON.parse(storedCourts);
+        }
+      } catch (e) {
+        console.error('Error parsing owner courts from localStorage:', e);
+      }
+
+      // If we don't have the courts in localStorage, we'll let the server handle the check
+      if (userCourts.length > 0 && !userCourts.some(court => court.id === courtId)) {
+        console.warn('Court owner attempting to access court they do not own:', courtId);
+        next({ name: 'forbidden' });
+        return;
+      }
+    }
+  }
+
   // Handle routes that are restricted for court owners
   if (to.meta.restrictCourtOwner && isAuthenticated && user && user.role === 'court_owner') {
     console.log('Court owner attempting to access restricted route, redirecting to owner/courts');

@@ -75,6 +75,22 @@ const navigateToCourt = (courtId: number) => {
 const setActiveTestimonial = (index: number) => {
   activeTestimonial.value = index;
 };
+
+// Get court image with proper URL
+const getCourtImage = (court: any) => {
+  if (court.image_url) {
+    // If image URL starts with /uploads, it's a server-side image
+    if (court.image_url.startsWith('/uploads')) {
+      // Use the API URL from environment variables
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+      return `${apiUrl}${court.image_url}`;
+    }
+    return court.image_url;
+  }
+
+  // Fallback to default image
+  return '/images/default-court.jpg';
+};
 </script>
 
 <template>
@@ -190,7 +206,7 @@ const setActiveTestimonial = (index: number) => {
             @click="navigateToCourt(court.id)"
           >
             <BaseCard
-              :image="court.image_url || '/images/default-court.jpg'"
+              :image="getCourtImage(court)"
               :image-alt="court.name"
               hoverable
               class="court-card"
@@ -218,7 +234,8 @@ const setActiveTestimonial = (index: number) => {
                 </div>
 
                 <div class="court-price">
-                  <span class="price-value">{{ court.hourly_rate }}đ</span>
+                  <span class="price-value" v-if="court.price_display">{{ court.price_display }}</span>
+                  <span class="price-value" v-else>{{ court.hourly_rate.toLocaleString() }} VNĐ</span>
                   <span class="price-unit">{{ t('courts.perHour') }}</span>
                 </div>
               </div>

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, reactive } from 'vue';
 import AdminLayout from '../../components/admin/AdminLayout.vue';
 import axios from 'axios';
 import { useToast } from '../../composables/useToast';
@@ -27,11 +27,42 @@ const fetchUsers = async () => {
       role: roleFilter.value !== 'all' ? roleFilter.value : undefined
     };
 
-    const response = await axios.get('/api/admin/users', { params });
-    users.value = response.data.users;
-    totalPages.value = Math.ceil(response.data.total / itemsPerPage);
+    // Lấy admin token từ localStorage
+    const adminToken = localStorage.getItem('admin_token');
+    if (!adminToken) {
+      console.error('No admin token found');
+      error.value = 'Bạn cần đăng nhập lại';
+      return;
+    }
+
+    // Thêm token vào header
+    const headers = {
+      'Authorization': `Bearer ${adminToken}`
+    };
+
+    console.log('Fetching users with admin token');
+    const response = await axios.get('/api/admin/users', {
+      params,
+      headers
+    });
+
+    console.log('Users fetched successfully:', response.data);
+    users.value = response.data.users || [];
+    totalPages.value = Math.ceil((response.data.total || users.value.length) / itemsPerPage);
   } catch (err: any) {
     console.error('Error fetching users:', err);
+    if (err.response) {
+      console.error('Response status:', err.response.status);
+      console.error('Response data:', err.response.data);
+
+      // Nếu lỗi 401, chuyển hướng đến trang đăng nhập admin
+      if (err.response.status === 401) {
+        localStorage.removeItem('admin_token');
+        localStorage.removeItem('admin');
+        window.location.href = '/admin/login';
+        return;
+      }
+    }
     error.value = 'Không thể tải danh sách người dùng';
   } finally {
     loading.value = false;
@@ -70,23 +101,268 @@ const formatDate = (dateString: string) => {
   }).format(date);
 };
 
+// Modal states
+const showAddUserModal = ref(false);
+const showEditUserModal = ref(false);
+const showDeleteConfirmModal = ref(false);
+
+// New user form data
+const newUser = reactive({
+  name: '',
+  email: '',
+  password: '',
+  phone: '',
+  role: 'customer',
+  id_card: '',
+  tax_code: ''
+});
+
+// Editing user data
+const editingUser = reactive({
+  id: 0,
+  name: '',
+  email: '',
+  phone: '',
+  role: '',
+  id_card: '',
+  tax_code: ''
+});
+
+// User to delete
+const userToDelete = ref(null);
+
 // Toggle user status (active/inactive)
 const toggleUserStatus = async (userId: number, currentStatus: boolean) => {
   try {
-    await axios.patch(`/api/admin/users/${userId}/status`, {
-      active: !currentStatus
-    });
+    // Lấy admin token từ localStorage
+    const adminToken = localStorage.getItem('admin_token');
+    if (!adminToken) {
+      console.error('No admin token found');
+      toast.error('Bạn cần đăng nhập lại');
+      return;
+    }
+
+    // Thêm token vào header
+    const headers = {
+      'Authorization': `Bearer ${adminToken}`
+    };
+
+    await axios.put(`/api/admin/users/${userId}/status`, {
+      is_active: !currentStatus
+    }, { headers });
 
     // Update user in the list
     const userIndex = users.value.findIndex((u: any) => u.id === userId);
     if (userIndex !== -1) {
-      users.value[userIndex].active = !currentStatus;
+      users.value[userIndex].is_active = !currentStatus;
     }
 
     toast.success(`Trạng thái người dùng đã được cập nhật`);
   } catch (err: any) {
     console.error('Error toggling user status:', err);
+    if (err.response && err.response.status === 401) {
+      localStorage.removeItem('admin_token');
+      localStorage.removeItem('admin');
+      window.location.href = '/admin/login';
+      return;
+    }
     toast.error('Không thể cập nhật trạng thái người dùng');
+  }
+};
+
+// Create new user
+const createUser = async () => {
+  try {
+    loading.value = true;
+
+    // Lấy admin token từ localStorage
+    const adminToken = localStorage.getItem('admin_token');
+    if (!adminToken) {
+      console.error('No admin token found');
+      toast.error('Bạn cần đăng nhập lại');
+      loading.value = false;
+      return;
+    }
+
+    // Thêm token vào header
+    const headers = {
+      'Authorization': `Bearer ${adminToken}`
+    };
+
+    const userData = { ...newUser };
+
+    // Only include court owner fields if role is court_owner
+    if (userData.role !== 'court_owner') {
+      delete userData.id_card;
+      delete userData.tax_code;
+    }
+
+    const response = await axios.post('/api/admin/users', userData, { headers });
+
+    // Add new user to the list
+    users.value.unshift(response.data.user);
+
+    // Reset form and close modal
+    Object.assign(newUser, {
+      name: '',
+      email: '',
+      password: '',
+      phone: '',
+      role: 'customer',
+      id_card: '',
+      tax_code: ''
+    });
+
+    showAddUserModal.value = false;
+    toast.success('Người dùng đã được tạo thành công');
+  } catch (err: any) {
+    console.error('Error creating user:', err);
+    if (err.response && err.response.status === 401) {
+      localStorage.removeItem('admin_token');
+      localStorage.removeItem('admin');
+      window.location.href = '/admin/login';
+      return;
+    }
+    toast.error(err.response?.data?.message || 'Không thể tạo người dùng');
+  } finally {
+    loading.value = false;
+  }
+};
+
+// Edit user
+const editUser = (user: any) => {
+  // Copy user data to editing form
+  Object.assign(editingUser, {
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    phone: user.phone || '',
+    role: user.role,
+    id_card: user.id_card || '',
+    tax_code: user.tax_code || ''
+  });
+
+  showEditUserModal.value = true;
+};
+
+// Update user
+const updateUser = async () => {
+  try {
+    loading.value = true;
+
+    // Lấy admin token từ localStorage
+    const adminToken = localStorage.getItem('admin_token');
+    if (!adminToken) {
+      console.error('No admin token found');
+      toast.error('Bạn cần đăng nhập lại');
+      loading.value = false;
+      return;
+    }
+
+    // Thêm token vào header
+    const headers = {
+      'Authorization': `Bearer ${adminToken}`
+    };
+
+    const userData = {
+      name: editingUser.name,
+      email: editingUser.email,
+      phone: editingUser.phone,
+      role: editingUser.role
+    };
+
+    // Only include court owner fields if role is court_owner
+    if (editingUser.role === 'court_owner') {
+      userData.id_card = editingUser.id_card;
+      userData.tax_code = editingUser.tax_code;
+    }
+
+    const response = await axios.put(`/api/admin/users/${editingUser.id}`, userData, { headers });
+
+    // Update user in the list
+    const userIndex = users.value.findIndex((u: any) => u.id === editingUser.id);
+    if (userIndex !== -1) {
+      users.value[userIndex] = { ...users.value[userIndex], ...response.data.user };
+    }
+
+    showEditUserModal.value = false;
+    toast.success('Thông tin người dùng đã được cập nhật');
+  } catch (err: any) {
+    console.error('Error updating user:', err);
+    if (err.response && err.response.status === 401) {
+      localStorage.removeItem('admin_token');
+      localStorage.removeItem('admin');
+      window.location.href = '/admin/login';
+      return;
+    }
+    toast.error(err.response?.data?.message || 'Không thể cập nhật thông tin người dùng');
+  } finally {
+    loading.value = false;
+  }
+};
+
+// Confirm delete user
+const confirmDeleteUser = (user: any) => {
+  userToDelete.value = user;
+  showDeleteConfirmModal.value = true;
+};
+
+// Delete user
+const deleteUser = async () => {
+  if (!userToDelete.value) return;
+
+  try {
+    loading.value = true;
+
+    // Lấy admin token từ localStorage
+    const adminToken = localStorage.getItem('admin_token');
+    if (!adminToken) {
+      console.error('No admin token found');
+      toast.error('Bạn cần đăng nhập lại');
+      loading.value = false;
+      return;
+    }
+
+    // Thêm token vào header
+    const headers = {
+      'Authorization': `Bearer ${adminToken}`
+    };
+
+    await axios.delete(`/api/admin/users/${userToDelete.value.id}`, { headers });
+
+    // Remove user from the list
+    users.value = users.value.filter((u: any) => u.id !== userToDelete.value.id);
+
+    showDeleteConfirmModal.value = false;
+    toast.success('Người dùng đã được xóa thành công');
+  } catch (err: any) {
+    console.error('Error deleting user:', err);
+    if (err.response && err.response.status === 401) {
+      localStorage.removeItem('admin_token');
+      localStorage.removeItem('admin');
+      window.location.href = '/admin/login';
+      return;
+    }
+    toast.error(err.response?.data?.message || 'Không thể xóa người dùng');
+  } finally {
+    loading.value = false;
+    userToDelete.value = null;
+  }
+};
+
+// Handle role change in add form
+const handleRoleChange = () => {
+  if (newUser.role !== 'court_owner') {
+    newUser.id_card = '';
+    newUser.tax_code = '';
+  }
+};
+
+// Handle role change in edit form
+const handleEditRoleChange = () => {
+  if (editingUser.role !== 'court_owner') {
+    editingUser.id_card = '';
+    editingUser.tax_code = '';
   }
 };
 
@@ -101,6 +377,10 @@ onMounted(() => {
       <div class="page-header">
         <h1>Quản lý người dùng</h1>
         <div class="header-actions">
+          <button class="add-user-btn" @click="showAddUserModal = true">
+            <i class="pi pi-plus"></i> Thêm người dùng mới
+          </button>
+
           <div class="search-container">
             <input
               type="text"
@@ -166,24 +446,27 @@ onMounted(() => {
               </td>
               <td>{{ formatDate(user.created_at) }}</td>
               <td>
-                <span class="status-badge" :class="{ active: user.active, inactive: !user.active }">
-                  {{ user.active ? 'Hoạt động' : 'Không hoạt động' }}
+                <span class="status-badge" :class="{ active: user.is_active, inactive: !user.is_active }">
+                  {{ user.is_active ? 'Hoạt động' : 'Không hoạt động' }}
                 </span>
               </td>
               <td class="actions-cell">
                 <button class="action-button view-button" title="Xem chi tiết">
                   <i class="pi pi-eye"></i>
                 </button>
-                <button class="action-button edit-button" title="Chỉnh sửa">
+                <button class="action-button edit-button" title="Chỉnh sửa" @click="editUser(user)">
                   <i class="pi pi-pencil"></i>
                 </button>
                 <button
                   class="action-button status-button"
-                  :class="{ 'deactivate': user.active, 'activate': !user.active }"
-                  @click="toggleUserStatus(user.id, user.active)"
-                  :title="user.active ? 'Vô hiệu hóa' : 'Kích hoạt'"
+                  :class="{ 'deactivate': user.is_active, 'activate': !user.is_active }"
+                  @click="toggleUserStatus(user.id, user.is_active)"
+                  :title="user.is_active ? 'Vô hiệu hóa' : 'Kích hoạt'"
                 >
-                  <i class="pi" :class="user.active ? 'pi-ban' : 'pi-check'"></i>
+                  <i class="pi" :class="user.is_active ? 'pi-ban' : 'pi-check'"></i>
+                </button>
+                <button class="action-button delete-button" title="Xóa" @click="confirmDeleteUser(user)">
+                  <i class="pi pi-trash"></i>
                 </button>
               </td>
             </tr>
@@ -210,6 +493,150 @@ onMounted(() => {
           >
             <i class="pi pi-chevron-right"></i>
           </button>
+        </div>
+      </div>
+
+      <!-- Add User Modal -->
+      <div v-if="showAddUserModal" class="modal-overlay">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h2>Thêm người dùng mới</h2>
+            <button class="close-button" @click="showAddUserModal = false">
+              <i class="pi pi-times"></i>
+            </button>
+          </div>
+
+          <form @submit.prevent="createUser">
+            <div class="form-group">
+              <label for="name">Họ tên <span class="required">*</span></label>
+              <input id="name" v-model="newUser.name" type="text" required />
+            </div>
+
+            <div class="form-group">
+              <label for="email">Email <span class="required">*</span></label>
+              <input id="email" v-model="newUser.email" type="email" required />
+            </div>
+
+            <div class="form-group">
+              <label for="password">Mật khẩu <span class="required">*</span></label>
+              <input id="password" v-model="newUser.password" type="password" required />
+            </div>
+
+            <div class="form-group">
+              <label for="phone">Số điện thoại</label>
+              <input id="phone" v-model="newUser.phone" type="text" />
+            </div>
+
+            <div class="form-group">
+              <label for="role">Vai trò <span class="required">*</span></label>
+              <select id="role" v-model="newUser.role" required @change="handleRoleChange">
+                <option value="customer">Người chơi</option>
+                <option value="court_owner">Chủ sân</option>
+              </select>
+            </div>
+
+            <div v-if="newUser.role === 'court_owner'" class="form-group">
+              <label for="id_card">Số CCCD <span class="required">*</span></label>
+              <input id="id_card" v-model="newUser.id_card" type="text" required />
+            </div>
+
+            <div v-if="newUser.role === 'court_owner'" class="form-group">
+              <label for="tax_code">Mã số thuế <span class="required">*</span></label>
+              <input id="tax_code" v-model="newUser.tax_code" type="text" required />
+            </div>
+
+            <div class="modal-actions">
+              <button type="button" class="cancel-btn" @click="showAddUserModal = false">
+                Hủy bỏ
+              </button>
+              <button type="submit" class="submit-btn">
+                Lưu
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <!-- Edit User Modal -->
+      <div v-if="showEditUserModal" class="modal-overlay">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h2>Chỉnh sửa người dùng</h2>
+            <button class="close-button" @click="showEditUserModal = false">
+              <i class="pi pi-times"></i>
+            </button>
+          </div>
+
+          <form @submit.prevent="updateUser">
+            <div class="form-group">
+              <label for="edit-name">Họ tên <span class="required">*</span></label>
+              <input id="edit-name" v-model="editingUser.name" type="text" required />
+            </div>
+
+            <div class="form-group">
+              <label for="edit-email">Email <span class="required">*</span></label>
+              <input id="edit-email" v-model="editingUser.email" type="email" required />
+            </div>
+
+            <div class="form-group">
+              <label for="edit-phone">Số điện thoại</label>
+              <input id="edit-phone" v-model="editingUser.phone" type="text" />
+            </div>
+
+            <div class="form-group">
+              <label for="edit-role">Vai trò <span class="required">*</span></label>
+              <select id="edit-role" v-model="editingUser.role" required @change="handleEditRoleChange">
+                <option value="customer">Người chơi</option>
+                <option value="court_owner">Chủ sân</option>
+              </select>
+            </div>
+
+            <div v-if="editingUser.role === 'court_owner'" class="form-group">
+              <label for="edit-id-card">Số CCCD <span class="required">*</span></label>
+              <input id="edit-id-card" v-model="editingUser.id_card" type="text" required />
+            </div>
+
+            <div v-if="editingUser.role === 'court_owner'" class="form-group">
+              <label for="edit-tax-code">Mã số thuế <span class="required">*</span></label>
+              <input id="edit-tax-code" v-model="editingUser.tax_code" type="text" required />
+            </div>
+
+            <div class="modal-actions">
+              <button type="button" class="cancel-btn" @click="showEditUserModal = false">
+                Hủy bỏ
+              </button>
+              <button type="submit" class="submit-btn">
+                Lưu
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <!-- Delete Confirmation Modal -->
+      <div v-if="showDeleteConfirmModal" class="modal-overlay">
+        <div class="modal-content confirmation-modal">
+          <div class="modal-header">
+            <h2>Xác nhận xóa</h2>
+            <button class="close-button" @click="showDeleteConfirmModal = false">
+              <i class="pi pi-times"></i>
+            </button>
+          </div>
+
+          <div class="confirmation-content">
+            <i class="pi pi-exclamation-triangle warning-icon"></i>
+            <p>Bạn có chắc chắn muốn xóa người dùng <strong>{{ userToDelete?.name }}</strong>?</p>
+            <p class="warning-text">Hành động này không thể hoàn tác.</p>
+          </div>
+
+          <div class="modal-actions">
+            <button type="button" class="cancel-btn" @click="showDeleteConfirmModal = false">
+              Hủy bỏ
+            </button>
+            <button type="button" class="delete-btn" @click="deleteUser">
+              Xóa
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -239,6 +666,28 @@ onMounted(() => {
     display: flex;
     gap: 1rem;
     flex-wrap: wrap;
+  }
+
+  .add-user-btn {
+    background-color: #2e7d32;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    padding: 0.6rem 1rem;
+    font-size: 0.9rem;
+    font-weight: 500;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+
+    &:hover {
+      background-color: #1b5e20;
+    }
+
+    i {
+      font-size: 0.9rem;
+    }
   }
 
   .search-container {
@@ -415,6 +864,11 @@ onMounted(() => {
         color: #2e7d32;
       }
     }
+
+    &.delete-button:hover {
+      color: #c62828;
+      background-color: #ffebee;
+    }
   }
 }
 
@@ -468,6 +922,161 @@ onMounted(() => {
   }
 }
 
+// Modal styles
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+
+.modal-content {
+  background-color: white;
+  border-radius: 12px;
+  width: 90%;
+  max-width: 500px;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+
+  .modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem 1.5rem;
+    border-bottom: 1px solid #f0f0f0;
+
+    h2 {
+      margin: 0;
+      font-size: 1.5rem;
+      color: #0A2342;
+    }
+
+    .close-button {
+      background: none;
+      border: none;
+      font-size: 1.2rem;
+      color: #666;
+      cursor: pointer;
+
+      &:hover {
+        color: #c62828;
+      }
+    }
+  }
+
+  form {
+    padding: 1.5rem;
+  }
+
+  .form-group {
+    margin-bottom: 1.2rem;
+
+    label {
+      display: block;
+      margin-bottom: 0.5rem;
+      font-weight: 500;
+      color: #0A2342;
+
+      .required {
+        color: #c62828;
+      }
+    }
+
+    input, select {
+      width: 100%;
+      padding: 0.8rem;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      font-size: 1rem;
+
+      &:focus {
+        outline: none;
+        border-color: #0A2342;
+        box-shadow: 0 0 0 3px rgba(10, 35, 66, 0.1);
+      }
+    }
+  }
+
+  .modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 1rem;
+    margin-top: 1.5rem;
+
+    button {
+      padding: 0.8rem 1.5rem;
+      border-radius: 8px;
+      font-size: 1rem;
+      font-weight: 500;
+      cursor: pointer;
+    }
+
+    .cancel-btn {
+      background-color: #f5f5f5;
+      color: #333;
+      border: 1px solid #ddd;
+
+      &:hover {
+        background-color: #e0e0e0;
+      }
+    }
+
+    .submit-btn {
+      background-color: #0A2342;
+      color: white;
+      border: none;
+
+      &:hover {
+        background-color: #1E90FF;
+      }
+    }
+
+    .delete-btn {
+      background-color: #c62828;
+      color: white;
+      border: none;
+
+      &:hover {
+        background-color: #b71c1c;
+      }
+    }
+  }
+}
+
+.confirmation-modal {
+  max-width: 400px;
+
+  .confirmation-content {
+    padding: 1.5rem;
+    text-align: center;
+
+    .warning-icon {
+      font-size: 3rem;
+      color: #ff9800;
+      margin-bottom: 1rem;
+    }
+
+    p {
+      margin: 0.5rem 0;
+      font-size: 1.1rem;
+      color: #333;
+    }
+
+    .warning-text {
+      color: #c62828;
+      font-size: 0.9rem;
+      margin-top: 1rem;
+    }
+  }
+}
+
 @media (max-width: 768px) {
   .page-header {
     flex-direction: column;
@@ -486,6 +1095,11 @@ onMounted(() => {
   .users-table {
     display: block;
     overflow-x: auto;
+  }
+
+  .modal-content {
+    width: 95%;
+    max-height: 80vh;
   }
 }
 </style>

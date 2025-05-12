@@ -1,9 +1,0 @@
-{
-  "common": {
-    "backToList": "Back to list"
-  },
-  "courtOwner": {
-    "uploadingImage": "Uploading image...",
-    "imageUploadError": "Error uploading image. Please try again."
-  }
-}

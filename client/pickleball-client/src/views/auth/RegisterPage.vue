@@ -3,6 +3,7 @@ import { ref, computed, watch } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useI18n } from 'vue-i18n';
 import { useForm } from 'vee-validate';
+import axios from 'axios';
 import { useAuthStore } from '../../store/auth';
 import { useValidation } from '../../composables/useValidation';
 import { useToast } from '../../composables/useToast';
@@ -25,6 +26,7 @@ const twoFactorSetupRequired = ref(false);
 const qrCodeUrl = ref('');
 const twoFactorCode = ref('');
 const twoFactorError = ref('');
+const isSubmitting = ref(false);
 
 // Create local refs for form fields
 const nameInput = ref('');
@@ -34,9 +36,30 @@ const idCardInput = ref('');
 const taxCodeInput = ref('');
 const passwordInput = ref('');
 const passwordConfirmationInput = ref('');
+const registerForm = ref<HTMLFormElement | null>(null);
 
 // Redirect path after successful registration
 const redirectPath = computed(() => route.query.redirect?.toString() || '/');
+
+// Direct submit function for button click
+const submitForm = () => {
+  console.log('Direct submit function called');
+  if (registerForm.value) {
+    console.log('Submitting form directly');
+    // Thêm log để kiểm tra dữ liệu form trước khi submit
+    console.log('Form data before submit:', {
+      name: nameInput.value,
+      email: emailInput.value,
+      phone: phoneInput.value,
+      password: passwordInput.value,
+      password_confirmation: passwordConfirmationInput.value,
+      role: userRole.value
+    });
+    registerForm.value.dispatchEvent(new Event('submit', { cancelable: true }));
+  } else {
+    console.error('Register form reference is null');
+  }
+};
 
 // Form validation
 const { handleSubmit, errors, setFieldValue } = useForm({
@@ -97,17 +120,27 @@ watch(passwordConfirmationInput, (newValue) => {
 });
 
 // Handle form submission
-const onSubmit = handleSubmit(async () => {
+const onSubmit = handleSubmit(async (values) => {
+  console.log('Form submitted with values:', values);
+  console.log('Form validation errors:', errors.value);
+
+  // Prevent multiple submissions
+  if (isSubmitting.value || authStore.loading) {
+    console.log('Form submission prevented: already submitting');
+    return;
+  }
+
   try {
+    // Set submitting state
+    isSubmitting.value = true;
+
+    // Reset error message
     registrationError.value = '';
 
-    // Kiểm tra xem form có hợp lệ không
-    if (Object.keys(errors.value).length > 0) {
-      console.error('Form validation errors:', errors.value);
-      registrationError.value = t('auth.formHasErrors');
-      return;
-    }
+    // Log validation state for debugging
+    console.log('Form validation state:', { errors: errors.value, isValid: Object.keys(errors.value).length === 0 });
 
+    // Prepare user data
     const userData = {
       name: nameInput.value,
       email: emailInput.value,
@@ -117,7 +150,7 @@ const onSubmit = handleSubmit(async () => {
       role: userRole.value
     };
 
-    // Thêm thông tin CCCD và mã số thuế nếu là chủ sân
+    // Add ID card and tax code for court owners
     if (userRole.value === 'court_owner') {
       userData.id_card = idCardInput.value;
       userData.tax_code = taxCodeInput.value;
@@ -125,50 +158,75 @@ const onSubmit = handleSubmit(async () => {
 
     console.log('Submitting registration data:', userData);
 
-    // Kiểm tra dữ liệu trước khi gửi
-    if (!userData.name || !userData.email || !userData.password || !userData.password_confirmation || !userData.phone) {
-      console.error('Missing required fields');
+    // Validate required fields
+    const missingFields = [];
+    if (!userData.name) missingFields.push('name');
+    if (!userData.email) missingFields.push('email');
+    if (!userData.phone) missingFields.push('phone');
+    if (!userData.password) missingFields.push('password');
+    if (!userData.password_confirmation) missingFields.push('password_confirmation');
+
+    if (userData.role === 'court_owner') {
+      if (!userData.id_card) missingFields.push('id_card');
+      if (!userData.tax_code) missingFields.push('tax_code');
+    }
+
+    if (missingFields.length > 0) {
+      console.error('Missing required fields:', missingFields);
       registrationError.value = t('auth.allFieldsRequired');
+      isSubmitting.value = false;
       return;
     }
 
-    // Kiểm tra thông tin bắt buộc cho chủ sân
-    if (userData.role === 'court_owner' && (!userData.id_card || !userData.tax_code)) {
-      console.error('Missing required fields for court owner');
-      registrationError.value = t('auth.allFieldsRequired');
-      return;
-    }
-
-    // Kiểm tra mật khẩu khớp nhau
+    // Validate password match
     if (userData.password !== userData.password_confirmation) {
       console.error('Passwords do not match');
       registrationError.value = t('auth.passwordsDoNotMatch');
+      isSubmitting.value = false;
       return;
     }
 
-    const response = await authStore.register(userData);
+    console.log('Calling authStore.register with data:', userData);
 
-    console.log('Registration response:', response);
+    try {
+      // Submit registration
+      const response = await authStore.register(userData);
+      console.log('Registration response:', response);
 
-    // Check if 2FA setup is required
-    if (response.requires_2fa_setup) {
-      twoFactorSetupRequired.value = true;
-      qrCodeUrl.value = response.qr_code || '';
-      return;
-    }
+      // Handle 2FA if required
+      if (response && response.requires_2fa_setup) {
+        twoFactorSetupRequired.value = true;
+        qrCodeUrl.value = response.qr_code || '';
+        return;
+      }
 
-    // Hiển thị thông báo phù hợp dựa trên vai trò
-    if (userRole.value === 'court_owner') {
-      toast.success(t('auth.courtOwnerRegistrationSuccess'));
-      // Chuyển đến trang thông báo đang chờ phê duyệt
-      router.push('/pending-approval');
-    } else {
-      toast.success(t('auth.registrationSuccess'));
-      router.push(redirectPath.value);
+      // Show success message and redirect
+      if (userRole.value === 'court_owner') {
+        toast.success(t('auth.courtOwnerRegistrationSuccess'));
+        router.push('/pending-approval');
+      } else {
+        toast.success(t('auth.registrationSuccess'));
+        router.push(redirectPath.value);
+      }
+    } catch (registerError) {
+      console.error('Error during register API call:', registerError);
+      if (typeof registerError === 'string') {
+        registrationError.value = registerError;
+      } else if (registerError.response && registerError.response.data && registerError.response.data.message) {
+        registrationError.value = registerError.response.data.message;
+      } else {
+        registrationError.value = t('auth.registrationFailed');
+      }
     }
   } catch (error) {
-    console.error('Registration error:', error);
+    console.error('Registration error in onSubmit:', error);
     registrationError.value = typeof error === 'string' ? error : t('auth.registrationFailed');
+  } finally {
+    // Always reset submitting state
+    setTimeout(() => {
+      isSubmitting.value = false;
+      console.log('Submission state reset to false');
+    }, 100);
   }
 });
 
@@ -188,6 +246,122 @@ const verifyTwoFactorSetup = async () => {
     router.push(redirectPath.value);
   } catch (error) {
     twoFactorError.value = typeof error === 'string' ? error : t('auth.twoFactorSetupFailed');
+  }
+};
+
+// Hàm đăng ký trực tiếp (không thông qua form submit)
+const directRegister = async () => {
+  console.log('Direct register function called');
+
+  // Prevent multiple submissions
+  if (isSubmitting.value || authStore.loading) {
+    console.log('Direct registration prevented: already submitting');
+    return;
+  }
+
+  try {
+    // Set submitting state
+    isSubmitting.value = true;
+
+    // Reset error message
+    registrationError.value = '';
+
+    // Prepare user data
+    const userData = {
+      name: nameInput.value,
+      email: emailInput.value,
+      phone: phoneInput.value,
+      password: passwordInput.value,
+      password_confirmation: passwordConfirmationInput.value,
+      role: userRole.value
+    };
+
+    // Add ID card and tax code for court owners
+    if (userRole.value === 'court_owner') {
+      userData.id_card = idCardInput.value;
+      userData.tax_code = taxCodeInput.value;
+    }
+
+    console.log('Direct registration data:', userData);
+
+    // Validate required fields
+    const missingFields = [];
+    if (!userData.name) missingFields.push('name');
+    if (!userData.email) missingFields.push('email');
+    if (!userData.phone) missingFields.push('phone');
+    if (!userData.password) missingFields.push('password');
+    if (!userData.password_confirmation) missingFields.push('password_confirmation');
+
+    if (userData.role === 'court_owner') {
+      if (!userData.id_card) missingFields.push('id_card');
+      if (!userData.tax_code) missingFields.push('tax_code');
+    }
+
+    if (missingFields.length > 0) {
+      console.error('Missing required fields:', missingFields);
+      registrationError.value = t('auth.allFieldsRequired');
+      return;
+    }
+
+    // Validate password match
+    if (userData.password !== userData.password_confirmation) {
+      console.error('Passwords do not match');
+      registrationError.value = t('auth.passwordsDoNotMatch');
+      return;
+    }
+
+    // Sử dụng axios trực tiếp để đăng ký
+    try {
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+      console.log('Direct API URL:', apiUrl);
+
+      const response = await axios.post(`${apiUrl}/api/auth/register`, userData, {
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        }
+      });
+
+      console.log('Direct registration response:', response.data);
+
+      // Handle 2FA if required
+      if (response.data.requires_2fa_setup) {
+        twoFactorSetupRequired.value = true;
+        qrCodeUrl.value = response.data.qr_code || '';
+        return;
+      }
+
+      // Set user data and token in store
+      authStore.setToken(response.data.token);
+      authStore.setUser(response.data.user);
+
+      // Show success message and redirect
+      if (userRole.value === 'court_owner') {
+        toast.success(t('auth.courtOwnerRegistrationSuccess'));
+        router.push('/pending-approval');
+      } else {
+        toast.success(t('auth.registrationSuccess'));
+        router.push(redirectPath.value);
+      }
+    } catch (apiError) {
+      console.error('Direct API error:', apiError);
+      if (apiError.response?.data?.message) {
+        registrationError.value = apiError.response.data.message;
+      } else if (apiError.message) {
+        registrationError.value = apiError.message;
+      } else {
+        registrationError.value = t('auth.registrationFailed');
+      }
+    }
+  } catch (error) {
+    console.error('Direct registration error:', error);
+    registrationError.value = typeof error === 'string' ? error : t('auth.registrationFailed');
+  } finally {
+    // Always reset submitting state
+    setTimeout(() => {
+      isSubmitting.value = false;
+      console.log('Direct registration state reset to false');
+    }, 100);
   }
 };
 
@@ -237,7 +411,13 @@ const goToLogin = () => {
           </div>
         </div>
 
-        <form @submit.prevent="onSubmit" class="auth-form">
+        <form class="auth-form" ref="registerForm" @submit.prevent="onSubmit">
+          <!-- Debug info -->
+          <div v-if="registrationError" class="debug-info" style="margin-bottom: 1rem; padding: 0.5rem; background-color: #f8f9fa; border-radius: 4px;">
+            <p style="font-size: 0.8rem; color: #6c757d; margin-bottom: 0.25rem;">Debug Info:</p>
+            <p style="font-size: 0.8rem; margin: 0;">Form Reference: {{ registerForm ? 'OK' : 'NULL' }}</p>
+          </div>
+
           <div class="form-group">
             <BaseInput
               v-model="nameInput"
@@ -351,12 +531,36 @@ const goToLogin = () => {
           </div>
 
           <div class="form-actions">
+            <!-- Nút submit form -->
             <button
               type="submit"
               class="register-button"
-              :disabled="authStore.loading"
+              :disabled="authStore.loading || isSubmitting"
+              style="display: none;"
             >
-              {{ authStore.loading ? t('common.loading') : t('auth.registerButton') }}
+              {{ authStore.loading || isSubmitting ? t('common.loading') : t('auth.registerButton') }}
+            </button>
+
+            <!-- Nút đăng ký chính với sự kiện click trực tiếp -->
+            <button
+              type="button"
+              class="register-button"
+              :disabled="authStore.loading || isSubmitting"
+              @click="directRegister"
+            >
+              {{ authStore.loading || isSubmitting ? t('common.loading') : t('auth.registerButton') }}
+            </button>
+
+            <!-- Nút dự phòng với form submit -->
+            <button
+              v-if="registrationError"
+              type="button"
+              class="register-button register-button--alt"
+              style="margin-top: 0.5rem; background-color: #6c757d;"
+              :disabled="authStore.loading || isSubmitting"
+              @click="submitForm"
+            >
+              {{ t('auth.tryAlternativeRegister') || 'Thử cách khác' }}
             </button>
           </div>
         </form>

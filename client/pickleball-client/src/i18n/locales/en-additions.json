@@ -1,8 +1,0 @@
-{
-  "auth": {
-    "resetPasswordTitle": "Reset Password",
-    "resetPasswordDesc": "Please enter your new password",
-    "resetPasswordButton": "Reset Password",
-    "newPassword": "New Password"
-  }
-}

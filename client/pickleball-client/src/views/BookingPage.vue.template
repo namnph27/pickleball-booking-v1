@@ -1,0 +1,315 @@
+<template>
+  <BaseLayout
+    :title="t('booking.bookCourt')"
+    :back-link="`/courts/${courtId}`"
+    :loading="courtStore.loading"
+  >
+    <template v-if="court">
+      <div class="booking-page">
+        <div class="booking-container">
+          <!-- Booking Details -->
+          <div class="booking-details">
+            <BaseCard>
+              <template #header>
+                <h2 class="section-title">{{ t('booking.bookingDetails') }}</h2>
+              </template>
+
+              <div class="court-info">
+                <h3 class="court-name">{{ court.name }}</h3>
+                <p class="court-location">
+                  <i class="pi pi-map-marker"></i> {{ court.location }}
+                </p>
+              </div>
+
+              <div class="booking-info">
+                <div class="info-item">
+                  <span class="info-label">{{ t('booking.bookingDate') }}:</span>
+                  <span class="info-value">{{ formattedDate }}</span>
+                </div>
+
+                <div class="info-item">
+                  <span class="info-label">{{ t('booking.bookingTime') }}:</span>
+                  <span class="info-value">{{ formattedTime }}</span>
+                </div>
+
+                <div class="info-item">
+                  <span class="info-label">{{ t('booking.duration') }}:</span>
+                  <span class="info-value">{{ duration }} {{ t('booking.hours') }}</span>
+                </div>
+
+                <div class="info-item">
+                  <span class="info-label">{{ t('booking.price') }}:</span>
+                  <span class="info-value">{{ formatCurrency(price) }}</span>
+                </div>
+
+                <div class="info-item">
+                  <span class="info-label">{{ t('common.skillLevel') }}:</span>
+                  <span class="info-value">{{ t(`common.${court.skill_level}`) }}</span>
+                </div>
+              </div>
+            </BaseCard>
+          </div>
+
+          <!-- Find Teammates Section -->
+          <div class="find-teammates-section">
+            <BaseCard>
+              <template #header>
+                <h2 class="section-title">{{ t('booking.findTeammates') }}</h2>
+              </template>
+
+              <div class="find-teammates-form">
+                <div class="find-teammates-toggle">
+                  <label class="toggle-label">
+                    <input type="checkbox" v-model="allowJoin" />
+                    <span class="toggle-text">{{ t('booking.allowJoin') }}</span>
+                  </label>
+                </div>
+
+                <div v-if="allowJoin" class="find-teammates-options">
+                  <div class="form-group">
+                    <label>{{ t('booking.skillLevel') }}</label>
+                    <BaseSelect
+                      v-model="skillLevel"
+                      :options="skillLevelOptions"
+                      :placeholder="t('booking.selectSkillLevel')"
+                      required
+                    />
+                  </div>
+
+                  <div class="form-group">
+                    <label>{{ t('booking.currentPlayers') }}</label>
+                    <div class="number-input">
+                      <button
+                        type="button"
+                        class="number-btn"
+                        @click="currentPlayers = Math.max(1, currentPlayers - 1)"
+                        :disabled="currentPlayers <= 1"
+                      >
+                        <i class="pi pi-minus"></i>
+                      </button>
+                      <span class="number-value">{{ currentPlayers }}</span>
+                      <button
+                        type="button"
+                        class="number-btn"
+                        @click="currentPlayers = Math.min(neededPlayers - 1, currentPlayers + 1)"
+                        :disabled="currentPlayers >= neededPlayers - 1"
+                      >
+                        <i class="pi pi-plus"></i>
+                      </button>
+                    </div>
+                  </div>
+
+                  <div class="form-group">
+                    <label>{{ t('booking.neededPlayers') }}</label>
+                    <div class="number-input">
+                      <button
+                        type="button"
+                        class="number-btn"
+                        @click="neededPlayers = Math.max(currentPlayers + 1, neededPlayers - 1)"
+                        :disabled="neededPlayers <= currentPlayers + 1"
+                      >
+                        <i class="pi pi-minus"></i>
+                      </button>
+                      <span class="number-value">{{ neededPlayers }}</span>
+                      <button
+                        type="button"
+                        class="number-btn"
+                        @click="neededPlayers = Math.min(8, neededPlayers + 1)"
+                        :disabled="neededPlayers >= 8"
+                      >
+                        <i class="pi pi-plus"></i>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <div v-if="allowJoin" class="find-teammates-info">
+                  <BaseAlert type="info">
+                    {{ t('booking.findTeammatesInfo') }}
+                  </BaseAlert>
+                </div>
+              </div>
+            </BaseCard>
+          </div>
+
+          <!-- Promotion Code -->
+          <div class="promotion-section">
+            <BaseCard>
+              <template #header>
+                <h2 class="section-title">{{ t('booking.promoCode') }}</h2>
+              </template>
+
+              <div v-if="!isPromoApplied" class="promo-form">
+                <div class="promo-input">
+                  <BaseInput
+                    v-model="promotionCode"
+                    :placeholder="t('booking.enterPromoCode')"
+                    :error="promoError"
+                  />
+                </div>
+
+                <BaseButton
+                  :label="t('booking.applyPromo')"
+                  variant="secondary"
+                  :loading="isPromoLoading"
+                  @click="applyPromotion"
+                />
+              </div>
+
+              <div v-else class="promo-applied">
+                <div class="promo-badge">
+                  <i class="pi pi-check-circle"></i>
+                  <span>{{ promotionCode }}</span>
+                </div>
+
+                <BaseButton
+                  icon="pi-times"
+                  variant="text"
+                  @click="removePromotion"
+                />
+              </div>
+            </BaseCard>
+          </div>
+
+          <!-- Payment Method -->
+          <div class="payment-method-section">
+            <BaseCard>
+              <template #header>
+                <h2 class="section-title">{{ t('booking.paymentMethod') }}</h2>
+              </template>
+
+              <div class="payment-methods">
+                <BaseSelect
+                  v-model="paymentMethod"
+                  :options="paymentMethods"
+                  :label="t('booking.selectPaymentMethod')"
+                />
+              </div>
+            </BaseCard>
+          </div>
+
+          <!-- Order Summary -->
+          <div class="order-summary">
+            <BaseCard>
+              <template #header>
+                <h2 class="section-title">{{ t('booking.orderSummary') }}</h2>
+              </template>
+
+              <div class="summary-items">
+                <div class="summary-item">
+                  <span class="item-label">{{ t('booking.subtotal') }}</span>
+                  <span class="item-value">{{ formatCurrency(subtotal) }}</span>
+                </div>
+
+                <div v-if="discount > 0" class="summary-item discount">
+                  <span class="item-label">{{ t('booking.discount') }}</span>
+                  <span class="item-value">-{{ formatCurrency(discount) }}</span>
+                </div>
+
+                <div class="summary-item total">
+                  <span class="item-label">{{ t('booking.totalPrice') }}</span>
+                  <span class="item-value">{{ formatCurrency(total) }}</span>
+                </div>
+              </div>
+
+              <div class="booking-actions">
+                <BaseButton
+                  :label="t('booking.confirmBooking')"
+                  variant="primary"
+                  full-width
+                  size="large"
+                  :loading="bookingStore.loading"
+                  @click="createBooking"
+                />
+              </div>
+            </BaseCard>
+          </div>
+        </div>
+      </div>
+    </template>
+
+    <!-- Payment Modal -->
+    <BaseModal
+      v-model="showPaymentModal"
+      :title="t('booking.processPayment')"
+      :ok-text="t('booking.payNow')"
+      :cancel-text="t('common.cancel')"
+      :loading="isProcessingPayment"
+      @ok="processPayment"
+      @cancel="cancelBooking"
+    >
+      <div v-if="bookingStore.currentBooking" class="payment-modal-content">
+        <div class="booking-summary">
+          <h3>{{ t('booking.bookingDetails') }}</h3>
+
+          <div class="summary-info">
+            <div class="info-row">
+              <span class="info-label">{{ t('courts.court') }}:</span>
+              <span class="info-value">{{ court?.name }}</span>
+            </div>
+
+            <div class="info-row">
+              <span class="info-label">{{ t('booking.bookingDate') }}:</span>
+              <span class="info-value">{{ formattedDate }}</span>
+            </div>
+
+            <div class="info-row">
+              <span class="info-label">{{ t('booking.bookingTime') }}:</span>
+              <span class="info-value">{{ formattedTime }}</span>
+            </div>
+
+            <div class="info-row">
+              <span class="info-label">{{ t('booking.totalPrice') }}:</span>
+              <span class="info-value">{{ formatCurrency(total) }}</span>
+            </div>
+          </div>
+        </div>
+
+        <div v-if="paymentMethod === 'credit_card' || paymentMethod === 'debit_card'" class="payment-form">
+          <h3>{{ t('booking.cardDetails') }}</h3>
+
+          <div class="form-group">
+            <BaseInput
+              v-model="cardNumber"
+              :label="t('booking.cardNumber')"
+              placeholder="1234 5678 9012 3456"
+            />
+          </div>
+
+          <div class="form-group">
+            <BaseInput
+              v-model="cardHolder"
+              :label="t('booking.cardHolder')"
+              placeholder="John Doe"
+            />
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <BaseInput
+                v-model="expiryDate"
+                :label="t('booking.expiryDate')"
+                placeholder="MM/YY"
+              />
+            </div>
+
+            <div class="form-group">
+              <BaseInput
+                v-model="cvv"
+                :label="t('booking.cvv')"
+                placeholder="123"
+                type="password"
+              />
+            </div>
+          </div>
+        </div>
+
+        <div v-else-if="paymentMethod === 'paypal'" class="paypal-info">
+          <BaseAlert type="info">
+            {{ t('booking.redirectToPaypal') }}
+          </BaseAlert>
+        </div>
+      </div>
+    </BaseModal>
+  </BaseLayout>
+</template>

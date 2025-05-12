@@ -16,6 +16,7 @@ const getAllCourts = async (req, res) => {
 const getCourtById = async (req, res) => {
   try {
     const { id } = req.params;
+    const { date } = req.query;
     console.log('Getting court by ID:', id);
 
     const court = await Court.findById(id);
@@ -27,8 +28,27 @@ const getCourtById = async (req, res) => {
     }
 
     // Get timeslots for the court
-    const timeslots = await CourtTimeslot.getByCourtId(id);
+    let timeslots;
+    if (date) {
+      // If date is provided, get timeslots for that specific date
+      timeslots = await CourtTimeslot.getTimeslotsForDate(id, date);
+    } else {
+      // Otherwise, get all timeslots
+      timeslots = await CourtTimeslot.getByCourtId(id);
+    }
     console.log('Timeslots found:', timeslots.length);
+
+    // Get price range for the court
+    const priceRange = await CourtTimeslot.getPriceRangeForCourt(id, date);
+    court.min_price = priceRange.min_price;
+    court.max_price = priceRange.max_price;
+
+    // If min and max are the same, just show one price
+    if (priceRange.min_price === priceRange.max_price) {
+      court.price_display = `${priceRange.min_price.toLocaleString()} VNĐ`;
+    } else {
+      court.price_display = `${priceRange.min_price.toLocaleString()} - ${priceRange.max_price.toLocaleString()} VNĐ`;
+    }
 
     res.status(200).json({
       court,
@@ -204,13 +224,24 @@ const searchCourts = async (req, res) => {
       }
     }
 
-    // If we have advanced filters (date, district, location, price), use the new searchWithFilters method
-    if (date || district || location || parsedMinPrice || parsedMaxPrice) {
+    // If we have price filters, use the timeslot-based price filtering
+    if (parsedMinPrice || parsedMaxPrice) {
+      // Set default values if only one end of the range is provided
+      const minPrice = parsedMinPrice !== undefined ? Number(parsedMinPrice) : 0;
+      const maxPrice = parsedMaxPrice !== undefined ? Number(parsedMaxPrice) : 1000000000; // Very high max as default
+
+      // Get court IDs that have timeslots within the price range
+      const courtIds = await CourtTimeslot.getCourtsWithinPriceRange(minPrice, maxPrice, date);
+
+      // If no courts match the price range, return empty array
+      if (courtIds.length === 0) {
+        return res.status(200).json({ courts: [] });
+      }
+
       // Prepare location parameter - district can be a code (quan_1) or a full location name
       let locationParam = district;
 
       // If district is a code like 'quan_1', we need to convert it to a location name
-      // This is a simple approach - in a real app, you might have a mapping table
       if (district && district.startsWith('quan_')) {
         // Extract district number and format it for search
         const districtNumber = district.replace('quan_', '');
@@ -224,21 +255,89 @@ const searchCourts = async (req, res) => {
           .join(' ');
       }
 
-      const courts = await Court.searchWithFilters({
+      // Get courts with other filters and then filter by the court IDs
+      const allFilteredCourts = await Court.searchWithFilters({
         query,
         date,
         district: locationParam,
-        location: location, // Pass the location parameter as well
-        min_price: parsedMinPrice ? Number(parsedMinPrice) : undefined,
-        max_price: parsedMaxPrice ? Number(parsedMaxPrice) : undefined
+        location: location
+        // Don't pass min_price and max_price here since we're filtering by court IDs
+      });
+
+      // Filter by court IDs from price range
+      let courts = allFilteredCourts.filter(court => courtIds.includes(court.id));
+
+      // Filter by skill level if provided
+      if (skill_level) {
+        courts = courts.filter(court =>
+          court.skill_level === skill_level || court.skill_level === 'all'
+        );
+      }
+
+      // For each court, get the price range for the selected date
+      for (const court of courts) {
+        const priceRange = await CourtTimeslot.getPriceRangeForCourt(court.id, date);
+        court.min_price = priceRange.min_price;
+        court.max_price = priceRange.max_price;
+
+        // If min and max are the same, just show one price
+        if (priceRange.min_price === priceRange.max_price) {
+          court.price_display = `${priceRange.min_price.toLocaleString()} VNĐ`;
+        } else {
+          court.price_display = `${priceRange.min_price.toLocaleString()} - ${priceRange.max_price.toLocaleString()} VNĐ`;
+        }
+      }
+
+      return res.status(200).json({ courts });
+    }
+    // If we have advanced filters (date, district, location) but no price filters
+    else if (date || district || location) {
+      // Prepare location parameter - district can be a code (quan_1) or a full location name
+      let locationParam = district;
+
+      // If district is a code like 'quan_1', we need to convert it to a location name
+      if (district && district.startsWith('quan_')) {
+        // Extract district number and format it for search
+        const districtNumber = district.replace('quan_', '');
+        locationParam = `Quận ${districtNumber}`;
+      } else if (district && district.includes('_')) {
+        // Handle other district codes like 'binh_thanh', 'thu_duc', etc.
+        // Convert snake_case to title case for search
+        locationParam = district
+          .split('_')
+          .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+          .join(' ');
+      }
+
+      let courts = await Court.searchWithFilters({
+        query,
+        date,
+        district: locationParam,
+        location: location
       });
 
       // Filter by skill level if provided
-      const filteredCourts = skill_level
-        ? courts.filter(court => court.skill_level === skill_level || court.skill_level === 'all')
-        : courts;
+      if (skill_level) {
+        courts = courts.filter(court =>
+          court.skill_level === skill_level || court.skill_level === 'all'
+        );
+      }
 
-      return res.status(200).json({ courts: filteredCourts });
+      // For each court, get the price range for the selected date
+      for (const court of courts) {
+        const priceRange = await CourtTimeslot.getPriceRangeForCourt(court.id, date);
+        court.min_price = priceRange.min_price;
+        court.max_price = priceRange.max_price;
+
+        // If min and max are the same, just show one price
+        if (priceRange.min_price === priceRange.max_price) {
+          court.price_display = `${priceRange.min_price.toLocaleString()} VNĐ`;
+        } else {
+          court.price_display = `${priceRange.min_price.toLocaleString()} - ${priceRange.max_price.toLocaleString()} VNĐ`;
+        }
+      }
+
+      return res.status(200).json({ courts });
     }
 
     // Otherwise, use the original search method
@@ -255,6 +354,20 @@ const searchCourts = async (req, res) => {
       courts = courts.filter(court =>
         court.skill_level === skill_level || court.skill_level === 'all'
       );
+    }
+
+    // For each court, get the general price range (not date-specific)
+    for (const court of courts) {
+      const priceRange = await CourtTimeslot.getPriceRangeForCourt(court.id);
+      court.min_price = priceRange.min_price;
+      court.max_price = priceRange.max_price;
+
+      // If min and max are the same, just show one price
+      if (priceRange.min_price === priceRange.max_price) {
+        court.price_display = `${priceRange.min_price.toLocaleString()} VNĐ`;
+      } else {
+        court.price_display = `${priceRange.min_price.toLocaleString()} - ${priceRange.max_price.toLocaleString()} VNĐ`;
+      }
     }
 
     res.status(200).json({ courts });
@@ -279,6 +392,21 @@ const getCourtsByOwner = async (req, res) => {
 const getAvailableCourts = async (req, res) => {
   try {
     const courts = await Court.getAvailable();
+
+    // For each court, get the general price range (not date-specific)
+    for (const court of courts) {
+      const priceRange = await CourtTimeslot.getPriceRangeForCourt(court.id);
+      court.min_price = priceRange.min_price;
+      court.max_price = priceRange.max_price;
+
+      // If min and max are the same, just show one price
+      if (priceRange.min_price === priceRange.max_price) {
+        court.price_display = `${priceRange.min_price.toLocaleString()} VNĐ`;
+      } else {
+        court.price_display = `${priceRange.min_price.toLocaleString()} - ${priceRange.max_price.toLocaleString()} VNĐ`;
+      }
+    }
+
     res.status(200).json({ courts });
   } catch (error) {
     console.error('Get available courts error:', error);

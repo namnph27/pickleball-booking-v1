@@ -16,6 +16,10 @@ export interface Court {
   is_available: boolean;
   created_at: string;
   updated_at?: string;
+  // Price range fields
+  min_price?: number;
+  max_price?: number;
+  price_display?: string;
 }
 
 export interface CourtSearchParams {
@@ -38,6 +42,8 @@ export interface CourtTimeslot {
   end_time: string;
   price: number;
   is_available: boolean;
+  specific_date?: string;
+  is_default_timeslot?: boolean;
 }
 
 export function useCourtService() {
@@ -58,6 +64,25 @@ export function useCourtService() {
 
   const getCourtById = (id: number) => {
     console.log('Calling API to get court by ID:', id);
+
+    // Security check for court owners
+    const user = JSON.parse(localStorage.getItem('user') || 'null');
+    if (user && user.role === 'court_owner') {
+      // Check if the user owns this court
+      try {
+        const storedCourts = localStorage.getItem('owner_courts');
+        if (storedCourts) {
+          const userCourts = JSON.parse(storedCourts);
+          if (userCourts.length > 0 && !userCourts.some(court => court.id === id)) {
+            console.warn('Court owner attempting to access court they do not own:', id);
+            return Promise.reject('You do not have permission to access this court');
+          }
+        }
+      } catch (e) {
+        console.error('Error checking court ownership:', e);
+      }
+    }
+
     return get<{ court: Court, timeslots: CourtTimeslot[] }>(`/api/courts/${id}`);
   };
 
@@ -88,15 +113,72 @@ export function useCourtService() {
 
   // Court timeslot management
   const createTimeslot = (courtId: number, timeslotData: Partial<CourtTimeslot>) => {
+    // Security check for court owners
+    const user = JSON.parse(localStorage.getItem('user') || 'null');
+    if (user && user.role === 'court_owner') {
+      // Check if the user owns this court
+      try {
+        const storedCourts = localStorage.getItem('owner_courts');
+        if (storedCourts) {
+          const userCourts = JSON.parse(storedCourts);
+          if (userCourts.length > 0 && !userCourts.some(court => court.id === courtId)) {
+            console.warn('Court owner attempting to create timeslot for court they do not own:', courtId);
+            return Promise.reject('You do not have permission to create timeslots for this court');
+          }
+        }
+      } catch (e) {
+        console.error('Error checking court ownership for timeslot creation:', e);
+      }
+    }
+
     return post<{ timeslot: CourtTimeslot }>(`/api/courts/${courtId}/timeslots`, timeslotData);
   };
 
   const updateTimeslot = (courtId: number, timeslotId: number, timeslotData: Partial<CourtTimeslot>) => {
-    return put<{ timeslot: CourtTimeslot }>(`/api/courts/${courtId}/timeslots/${timeslotId}`, timeslotData);
+    return put<{ timeslot: CourtTimeslot }>(`/api/courts/timeslots/${timeslotId}`, timeslotData);
   };
 
   const deleteTimeslot = (courtId: number, timeslotId: number) => {
-    return del<{ message: string }>(`/api/courts/${courtId}/timeslots/${timeslotId}`);
+    return del<{ message: string }>(`/api/courts/timeslots/${timeslotId}`);
+  };
+
+  const getTimeslotsByDate = (courtId: number, date: string) => {
+    // Security check for court owners
+    const user = JSON.parse(localStorage.getItem('user') || 'null');
+    if (user && user.role === 'court_owner') {
+      // Check if the user owns this court
+      try {
+        const storedCourts = localStorage.getItem('owner_courts');
+        if (storedCourts) {
+          const userCourts = JSON.parse(storedCourts);
+          if (userCourts.length > 0 && !userCourts.some(court => court.id === courtId)) {
+            console.warn('Court owner attempting to access timeslots for court they do not own:', courtId);
+            return Promise.reject('You do not have permission to access timeslots for this court');
+          }
+        }
+      } catch (e) {
+        console.error('Error checking court ownership for timeslots:', e);
+      }
+    }
+
+    return get<{ timeslots: CourtTimeslot[] }>(`/api/courts/${courtId}/timeslots/by-date`, { date });
+  };
+
+  const getAvailableTimeslotsByDate = (courtId: number, date: string) => {
+    return get<{ timeslots: CourtTimeslot[] }>(`/api/courts/${courtId}/timeslots/available`, { date });
+  };
+
+  const copyDayOfWeekTimeslotsToDate = (courtId: number, dayOfWeek: number, specificDate: string) => {
+    return post<{ timeslots: CourtTimeslot[], message: string }>(`/api/courts/${courtId}/timeslots/copy-day`, {
+      day_of_week: dayOfWeek,
+      specific_date: specificDate
+    });
+  };
+
+  const deleteTimeslotsByDate = (courtId: number, specificDate: string) => {
+    return del<{ message: string }>(`/api/courts/${courtId}/timeslots/by-date`, {
+      specific_date: specificDate
+    });
   };
 
   return {
@@ -112,6 +194,10 @@ export function useCourtService() {
     getCourtsByOwner,
     createTimeslot,
     updateTimeslot,
-    deleteTimeslot
+    deleteTimeslot,
+    getTimeslotsByDate,
+    getAvailableTimeslotsByDate,
+    copyDayOfWeekTimeslotsToDate,
+    deleteTimeslotsByDate
   };
 }

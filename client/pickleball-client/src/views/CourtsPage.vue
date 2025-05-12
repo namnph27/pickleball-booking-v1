@@ -184,6 +184,22 @@ const formatPhoneNumber = (phone) => {
   }
 };
 
+// Get court image with proper URL
+const getCourtImage = (court) => {
+  if (court.image_url) {
+    // If image URL starts with /uploads, it's a server-side image
+    if (court.image_url.startsWith('/uploads')) {
+      // Use the API URL from environment variables
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+      return `${apiUrl}${court.image_url}`;
+    }
+    return court.image_url;
+  }
+
+  // Fallback to default image
+  return '/images/default-court.jpg';
+};
+
 // Fetch courts on mount
 onMounted(async () => {
   if (Object.keys(route.query).length > 0) {
@@ -356,7 +372,7 @@ onBeforeUnmount(() => {
             :style="{ 'animation-delay': `${index * 0.1}s` }"
           >
             <BaseCard
-              :image="court.image_url || '/images/default-court.jpg'"
+              :image="getCourtImage(court)"
               :image-alt="court.name"
               hoverable
               class="court-card"
@@ -364,14 +380,22 @@ onBeforeUnmount(() => {
             >
               <template #header>
                 <div class="court-header">
-                  <div class="court-header-content">
-                    <h3 class="court-name">{{ court.name }}</h3>
+                  <h3 class="court-name" :title="court.name">{{ court.name }}</h3>
+                  <div class="court-location-container">
                     <div class="court-location">
                       <i class="pi pi-map-marker location-icon"></i> {{ court.location }}
                     </div>
+                    <div class="court-district" v-if="court.district_name">
+                      <i class="pi pi-map location-district-icon"></i> {{ court.district_name }}
+                    </div>
+                    <div class="court-district" v-else-if="court.district">
+                      <i class="pi pi-map location-district-icon"></i>
+                      {{ districtOptions.find(d => d.value === court.district)?.label || 'Quận không xác định' }}
+                    </div>
                   </div>
                   <div class="court-price">
-                    <span class="price-value">{{ court.hourly_rate.toLocaleString() }} VNĐ</span>
+                    <span class="price-value" v-if="court.price_display">{{ court.price_display }}</span>
+                    <span class="price-value" v-else>{{ court.hourly_rate.toLocaleString() }} VNĐ</span>
                     <span class="price-unit">/giờ</span>
                   </div>
                 </div>
@@ -387,38 +411,6 @@ onBeforeUnmount(() => {
                     }}
                   </p>
                 </div>
-
-                <div class="court-contact-info">
-                  <div class="contact-header">
-                    <i class="pi pi-id-card contact-header-icon"></i>
-                    <h4>Thông tin liên hệ</h4>
-                  </div>
-
-                  <div class="contact-details">
-                    <div v-if="court.owner_name" class="contact-item">
-                      <i class="pi pi-user contact-icon"></i>
-                      <div>
-                        <span class="contact-label">Chủ sân</span>
-                        <span class="contact-value">{{ court.owner_name }}</span>
-                      </div>
-                    </div>
-
-                    <div class="contact-item">
-                      <i class="pi pi-phone contact-icon"></i>
-                      <div>
-                        <span class="contact-label">Điện thoại</span>
-                        <a
-                          v-if="court.owner_phone"
-                          :href="`tel:${court.owner_phone}`"
-                          class="contact-value phone-link"
-                        >
-                          {{ formatPhoneNumber(court.owner_phone) }}
-                        </a>
-                        <span v-else class="contact-value text-muted">Chưa cập nhật</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
               </div>
 
               <template #footer>
@@ -426,7 +418,9 @@ onBeforeUnmount(() => {
                   <BaseButton
                     :label="'Xem chi tiết'"
                     variant="outline"
-                    icon="pi-info-circle"
+                    icon="pi-id-card"
+                    class="view-details-button"
+                    title="Xem thông tin chi tiết và liên hệ"
                   />
                   <BaseButton
                     :label="'Đặt sân ngay'"
@@ -773,35 +767,82 @@ onBeforeUnmount(() => {
     background-color: white;
     border-bottom: 1px solid rgba(10, 35, 66, 0.05);
     display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-  }
-
-  .court-header-content {
-    flex: 1;
+    flex-direction: column;
+    gap: 0.75rem;
   }
 
   .court-name {
     font-size: 1.25rem;
     font-weight: 700;
-    margin-bottom: 0.5rem;
     color: var(--primary-color);
     display: -webkit-box;
-    -webkit-line-clamp: 1;
+    -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
     overflow: hidden;
+    text-align: center;
+    margin-bottom: 0.5rem;
+    border-bottom: 2px solid rgba(10, 35, 66, 0.05);
+    padding-bottom: 0.75rem;
+    min-height: 4rem;
+    line-height: 1.4;
+    position: relative;
+    cursor: help;
+
+    &:hover::after {
+      content: attr(title);
+      position: absolute;
+      bottom: -5px;
+      left: 50%;
+      transform: translateX(-50%) translateY(100%);
+      background-color: rgba(0, 0, 0, 0.8);
+      color: white;
+      padding: 0.5rem;
+      border-radius: 4px;
+      font-size: 0.9rem;
+      white-space: nowrap;
+      z-index: 10;
+      max-width: 90%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      opacity: 0.9;
+      pointer-events: none;
+      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+    }
+  }
+
+  .court-location-container {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    background-color: rgba(245, 247, 250, 0.7);
+    padding: 0.75rem;
+    border-radius: 8px;
   }
 
   .court-location {
-    font-size: 0.875rem;
+    font-size: 0.9rem;
     color: var(--dark-gray);
     display: flex;
     align-items: center;
     gap: 0.5rem;
-    margin-top: 0.25rem;
 
     .location-icon {
       color: #ff6b6b;
+      font-size: 1rem;
+    }
+  }
+
+  .court-district {
+    font-size: 0.9rem;
+    color: var(--dark-gray);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-weight: 600;
+
+    .location-district-icon {
+      color: #4caf50;
+      font-size: 1rem;
     }
   }
 
@@ -813,8 +854,8 @@ onBeforeUnmount(() => {
     box-shadow: 0 4px 8px rgba(10, 35, 66, 0.1);
     position: relative;
     overflow: hidden;
-    min-width: 120px;
-    margin-left: 1rem;
+    width: 100%;
+    margin-top: 0.5rem;
 
     &::before {
       content: '';
@@ -1007,6 +1048,29 @@ onBeforeUnmount(() => {
 
         &:hover {
           background-color: rgba(30, 144, 255, 0.05);
+        }
+      }
+
+      &.view-details-button {
+        position: relative;
+        overflow: hidden;
+
+        &::after {
+          content: 'Bao gồm thông tin liên hệ';
+          position: absolute;
+          bottom: -20px;
+          left: 0;
+          width: 100%;
+          font-size: 0.7rem;
+          color: var(--dark-gray);
+          text-align: center;
+          opacity: 0;
+          transition: all 0.3s ease;
+        }
+
+        &:hover::after {
+          bottom: -18px;
+          opacity: 1;
         }
       }
     }
@@ -1272,25 +1336,48 @@ onBeforeUnmount(() => {
   }
 
   .court-card {
-    .court-header {
-      flex-direction: column;
+    .court-name {
+      font-size: 1.1rem;
+      padding-bottom: 0.5rem;
+      min-height: 3.5rem;
 
-      .court-price {
-        margin-left: 0;
-        margin-top: 1rem;
-        width: 100%;
+      &:hover::after {
+        max-width: 95%;
+        font-size: 0.8rem;
+        padding: 0.3rem;
       }
     }
 
-    .court-contact-info {
-      .contact-details {
-        grid-template-columns: 1fr;
+    .court-location-container {
+      padding: 0.5rem;
+    }
+
+    .court-location, .court-district {
+      font-size: 0.85rem;
+    }
+
+    .court-price {
+      padding: 0.5rem;
+
+      .price-value {
+        font-size: 1.1rem;
       }
     }
 
     .card-actions {
       flex-direction: column;
       gap: 0.75rem;
+
+      :deep(.base-button) {
+        &.view-details-button::after {
+          bottom: -16px;
+          font-size: 0.65rem;
+        }
+
+        &.view-details-button:hover::after {
+          bottom: -14px;
+        }
+      }
     }
   }
 }

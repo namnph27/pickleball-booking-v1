@@ -70,16 +70,72 @@ const User = {
 
   // Update user
   async update(id, userData) {
-    const { name, email, phone } = userData;
+    const { name, email, phone, role, id_card, tax_code, approval_status } = userData;
+
+    // Build dynamic update query
+    let updateFields = [];
+    let values = [];
+    let valueIndex = 1;
+
+    if (name !== undefined) {
+      updateFields.push(`name = $${valueIndex}`);
+      values.push(name);
+      valueIndex++;
+    }
+
+    if (email !== undefined) {
+      updateFields.push(`email = $${valueIndex}`);
+      values.push(email);
+      valueIndex++;
+    }
+
+    if (phone !== undefined) {
+      updateFields.push(`phone = $${valueIndex}`);
+      values.push(phone);
+      valueIndex++;
+    }
+
+    if (role !== undefined) {
+      updateFields.push(`role = $${valueIndex}`);
+      values.push(role);
+      valueIndex++;
+    }
+
+    if (id_card !== undefined) {
+      updateFields.push(`id_card = $${valueIndex}`);
+      values.push(id_card);
+      valueIndex++;
+    }
+
+    if (tax_code !== undefined) {
+      updateFields.push(`tax_code = $${valueIndex}`);
+      values.push(tax_code);
+      valueIndex++;
+    }
+
+    if (approval_status !== undefined) {
+      updateFields.push(`approval_status = $${valueIndex}`);
+      values.push(approval_status);
+      valueIndex++;
+    }
+
+    // Always update the updated_at timestamp
+    updateFields.push(`updated_at = NOW()`);
+
+    // If no fields to update, return the existing user
+    if (values.length === 0) {
+      return this.findById(id);
+    }
+
+    // Add the ID as the last parameter
+    values.push(id);
 
     const query = `
       UPDATE users
-      SET name = $1, email = $2, phone = $3, updated_at = NOW()
-      WHERE id = $4
-      RETURNING id, name, email, phone, role, created_at, updated_at
+      SET ${updateFields.join(', ')}
+      WHERE id = $${valueIndex}
+      RETURNING id, name, email, phone, role, id_card, tax_code, approval_status, created_at, updated_at
     `;
-
-    const values = [name, email, phone, id];
 
     try {
       const result = await db.query(query, values);
@@ -441,40 +497,72 @@ const User = {
       offset = 0
     } = filters;
 
-    let query = `
-      SELECT id, name, email, phone, role, created_at, updated_at
-      FROM users
-      WHERE 1=1
-    `;
-
-    const values = [];
-    let valueIndex = 1;
-
-    if (name) {
-      query += ` AND name ILIKE $${valueIndex}`;
-      values.push(`%${name}%`);
-      valueIndex++;
-    }
-
-    if (email) {
-      query += ` AND email ILIKE $${valueIndex}`;
-      values.push(`%${email}%`);
-      valueIndex++;
-    }
-
-    if (role) {
-      query += ` AND role = $${valueIndex}`;
-      values.push(role);
-      valueIndex++;
-    }
-
-    query += ` ORDER BY created_at DESC LIMIT $${valueIndex} OFFSET $${valueIndex + 1}`;
-    values.push(limit, offset);
-
     try {
+      // Kiểm tra xem các cột cần thiết có tồn tại không
+      const checkColumnsQuery = `
+        SELECT column_name
+        FROM information_schema.columns
+        WHERE table_name = 'users'
+        AND column_name IN ('is_active', 'is_verified')
+      `;
+
+      const columnsResult = await db.query(checkColumnsQuery);
+      const existingColumns = columnsResult.rows.map(row => row.column_name);
+
+      console.log('Existing columns:', existingColumns);
+
+      // Xây dựng câu truy vấn SELECT dựa trên các cột tồn tại
+      let selectClause = 'id, name, email, phone, role, created_at, updated_at';
+
+      if (existingColumns.includes('is_active')) {
+        selectClause += ', is_active';
+      } else {
+        selectClause += ', TRUE as is_active'; // Mặc định là active nếu cột không tồn tại
+      }
+
+      if (existingColumns.includes('is_verified')) {
+        selectClause += ', is_verified';
+      } else {
+        selectClause += ', FALSE as is_verified'; // Mặc định là chưa xác minh nếu cột không tồn tại
+      }
+
+      let query = `
+        SELECT ${selectClause}
+        FROM users
+        WHERE 1=1
+      `;
+
+      const values = [];
+      let valueIndex = 1;
+
+      if (name) {
+        query += ` AND name ILIKE $${valueIndex}`;
+        values.push(`%${name}%`);
+        valueIndex++;
+      }
+
+      if (email) {
+        query += ` AND email ILIKE $${valueIndex}`;
+        values.push(`%${email}%`);
+        valueIndex++;
+      }
+
+      if (role) {
+        query += ` AND role = $${valueIndex}`;
+        values.push(role);
+        valueIndex++;
+      }
+
+      query += ` ORDER BY created_at DESC LIMIT $${valueIndex} OFFSET $${valueIndex + 1}`;
+      values.push(limit, offset);
+
+      console.log('Executing query:', query);
+      console.log('With values:', values);
+
       const result = await db.query(query, values);
       return result.rows;
     } catch (error) {
+      console.error('Error in getByFilters:', error);
       throw error;
     }
   },

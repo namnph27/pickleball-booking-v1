@@ -1,0 +1,12 @@
+{
+  "courts": {
+    "bookNow": "Book Now",
+    "availability": "Availability",
+    "amenities": "Amenities",
+    "location": "Location",
+    "mapPlaceholder": "Map will be displayed here",
+    "noAvailabilityForDate": "No availability for this date",
+    "available": "Available",
+    "unavailable": "Unavailable"
+  }
+}
