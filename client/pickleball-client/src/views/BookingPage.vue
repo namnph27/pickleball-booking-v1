@@ -4,7 +4,6 @@ import { useRoute, useRouter } from 'vue-router';
 import { useI18n } from 'vue-i18n';
 import { useCourtStore } from '../store/court';
 import { useBookingStore } from '../store/booking';
-import { useAuthStore } from '../store/auth';
 import { usePromotionService } from '../services/PromotionService';
 import { useToast } from '../composables/useToast';
 import BaseLayout from '../components/layout/BaseLayout.vue';
@@ -20,7 +19,6 @@ const route = useRoute();
 const router = useRouter();
 const courtStore = useCourtStore();
 const bookingStore = useBookingStore();
-const authStore = useAuthStore();
 const promotionService = usePromotionService();
 const toast = useToast();
 
@@ -32,7 +30,8 @@ const endTime = ref(route.query.end_time?.toString() || '');
 
 // Booking state
 const promotionCode = ref('');
-const paymentMethod = ref('credit_card');
+const paymentMethod = ref('online_payment');
+const paymentGateway = ref('vnpay');
 const isPromoApplied = ref(false);
 const isPromoLoading = ref(false);
 const promoError = ref('');
@@ -45,15 +44,10 @@ const neededPlayers = ref(4);
 const allowJoin = ref(false);
 
 // Payment details
-const cardNumber = ref('');
-const cardHolder = ref('');
-const expiryDate = ref('');
-const cvv = ref('');
 const isProcessingPayment = ref(false);
 
 // Computed properties
 const court = computed(() => courtStore.currentCourt);
-const user = computed(() => authStore.user);
 const selectedTimeSlot = computed(() => {
   if (!startTime.value || !endTime.value) return null;
 
@@ -115,10 +109,14 @@ const formattedTime = computed(() => {
 });
 
 const paymentMethods = computed(() => [
-  { value: 'credit_card', label: t('booking.creditCard') },
-  { value: 'debit_card', label: t('booking.debitCard') },
-  { value: 'paypal', label: t('booking.paypal') }
+  { value: 'online_payment', label: t('booking.onlinePayment'), gateways: [
+    { value: 'vnpay', label: 'VNPay', icon: '/images/payment/vnpay.png' },
+    { value: 'momo', label: 'MoMo', icon: '/images/payment/momo.png' }
+  ]},
+  { value: 'bank_transfer', label: t('booking.bankTransfer'), icon: '/images/payment/Vietcombank.png' }
 ]);
+
+
 
 const skillLevelOptions = computed(() => [
   { value: 'beginner', label: t('common.beginner') },
@@ -222,12 +220,10 @@ const processPayment = async () => {
     return;
   }
 
-  // Validate payment details
-  if (paymentMethod.value === 'credit_card' || paymentMethod.value === 'debit_card') {
-    if (!cardNumber.value || !cardHolder.value || !expiryDate.value || !cvv.value) {
-      toast.error(t('booking.incompletePaymentDetails'));
-      return;
-    }
+  // Validate payment method selection
+  if (paymentMethod.value === 'online_payment' && !paymentGateway.value) {
+    toast.error(t('booking.selectPaymentGateway'));
+    return;
   }
 
   isProcessingPayment.value = true;
@@ -236,12 +232,10 @@ const processPayment = async () => {
     const paymentData = {
       booking_id: bookingStore.currentBooking.id,
       payment_method: paymentMethod.value,
-      card_number: cardNumber.value,
-      card_holder: cardHolder.value,
-      expiry_date: expiryDate.value,
-      cvv: cvv.value
+      payment_gateway: paymentMethod.value === 'online_payment' ? paymentGateway.value : undefined
     };
 
+    // Simplified payment flow - assume payment is successful
     await bookingStore.processPayment(paymentData);
 
     toast.success(t('booking.paymentSuccessful'));
@@ -464,7 +458,7 @@ onMounted(async () => {
           </div>
 
           <!-- Payment Method -->
-          <div class="payment-method-section">
+          <!-- <div class="payment-method-section">
             <BaseCard>
               <template #header>
                 <h2 class="section-title">{{ t('booking.paymentMethod') }}</h2>
@@ -478,7 +472,7 @@ onMounted(async () => {
                 />
               </div>
             </BaseCard>
-          </div>
+          </div> -->
 
           <!-- Order Summary -->
           <div class="order-summary">
@@ -557,50 +551,59 @@ onMounted(async () => {
           </div>
         </div>
 
-        <div v-if="paymentMethod === 'credit_card' || paymentMethod === 'debit_card'" class="payment-form">
-          <h3>{{ t('booking.cardDetails') }}</h3>
+        <div class="payment-method-selection">
+          <h3>{{ t('booking.selectPaymentMethod') }}</h3>
 
-          <div class="form-group">
-            <BaseInput
-              v-model="cardNumber"
-              :label="t('booking.cardNumber')"
-              placeholder="1234 5678 9012 3456"
-            />
+          <div class="payment-methods-list">
+            <div
+              v-for="method in paymentMethods"
+              :key="method.value"
+              :class="['payment-method-item', { active: paymentMethod === method.value }]"
+              @click="paymentMethod = method.value"
+            >
+              <div class="method-icon" v-if="method.icon">
+                <img :src="method.icon" :alt="method.label">
+              </div>
+              <div class="method-name">{{ method.label }}</div>
+            </div>
           </div>
 
-          <div class="form-group">
-            <BaseInput
-              v-model="cardHolder"
-              :label="t('booking.cardHolder')"
-              placeholder="John Doe"
-            />
+          <!-- Online Payment Gateways -->
+          <div v-if="paymentMethod === 'online_payment'" class="payment-gateways">
+            <h4>{{ t('booking.selectGateway') }}</h4>
+
+            <div class="payment-gateways-list">
+              <div
+                v-for="gateway in paymentMethods.find(m => m.value === 'online_payment')?.gateways"
+                :key="gateway.value"
+                :class="['payment-gateway-item', { active: paymentGateway === gateway.value }]"
+                @click="paymentGateway = gateway.value"
+              >
+                <div class="gateway-icon">
+                  <img :src="gateway.icon" :alt="gateway.label">
+                </div>
+                <div class="gateway-name">{{ gateway.label }}</div>
+              </div>
+            </div>
           </div>
 
-          <div class="form-row">
-            <div class="form-group">
-              <BaseInput
-                v-model="expiryDate"
-                :label="t('booking.expiryDate')"
-                placeholder="MM/YY"
-              />
-            </div>
-
-            <div class="form-group">
-              <BaseInput
-                v-model="cvv"
-                :label="t('booking.cvv')"
-                placeholder="123"
-                type="password"
-              />
-            </div>
+          <!-- Bank Transfer Info -->
+          <div v-if="paymentMethod === 'bank_transfer'" class="bank-transfer-info">
+            <BaseAlert type="info">
+              <h4>{{ t('booking.bankTransferInfo') }}</h4>
+              <div class="bank-details">
+                <p><strong>Ngân hàng:</strong> Vietcombank</p>
+                <p><strong>Số tài khoản:</strong> 1234567890</p>
+                <p><strong>Tên tài khoản:</strong> Pickleball Zone</p>
+                <p><strong>Nội dung chuyển khoản:</strong> PB-{{ bookingStore.currentBooking?.id }}</p>
+              </div>
+            </BaseAlert>
           </div>
         </div>
 
-        <div v-else-if="paymentMethod === 'paypal'" class="paypal-info">
-          <BaseAlert type="info">
-            {{ t('booking.redirectToPaypal') }}
-          </BaseAlert>
-        </div>
+        <!-- <BaseAlert type="success" class="payment-note">
+          Đây là phiên bản demo, thanh toán sẽ được xử lý tự động thành công khi bạn bấm "Thanh toán ngay". Không cần thông tin thẻ hoặc tài khoản thực.
+        </BaseAlert> -->
       </div>
     </BaseModal>
   </BaseLayout>
@@ -846,8 +849,125 @@ onMounted(async () => {
     }
   }
 
-  .paypal-info {
+  .payment-method-selection {
+    margin-bottom: 1.5rem;
+
+    h3, h4 {
+      font-size: 1.125rem;
+      font-weight: 600;
+      margin: 0 0 1rem 0;
+    }
+
+    h4 {
+      font-size: 1rem;
+      margin-top: 1.5rem;
+    }
+  }
+
+  .payment-methods-list {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
+
+  .payment-method-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 1rem;
+    border: 1px solid var(--light-gray);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+    min-width: 120px;
+
+    &:hover {
+      border-color: var(--primary-color);
+      background-color: rgba(var(--primary-rgb), 0.05);
+    }
+
+    &.active {
+      border-color: var(--primary-color);
+      background-color: rgba(var(--primary-rgb), 0.1);
+    }
+
+    .method-icon {
+      height: 40px;
+      margin-bottom: 0.5rem;
+      display: flex;
+      align-items: center;
+
+      img {
+        max-height: 100%;
+        max-width: 100%;
+      }
+    }
+
+    .method-name {
+      font-weight: 500;
+      text-align: center;
+    }
+  }
+
+  .payment-gateways-list {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
+
+  .payment-gateway-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 1rem;
+    border: 1px solid var(--light-gray);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+    min-width: 100px;
+
+    &:hover {
+      border-color: var(--primary-color);
+      background-color: rgba(var(--primary-rgb), 0.05);
+    }
+
+    &.active {
+      border-color: var(--primary-color);
+      background-color: rgba(var(--primary-rgb), 0.1);
+    }
+
+    .gateway-icon {
+      height: 40px;
+      margin-bottom: 0.5rem;
+      display: flex;
+      align-items: center;
+
+      img {
+        max-height: 100%;
+        max-width: 100%;
+      }
+    }
+
+    .gateway-name {
+      font-weight: 500;
+      text-align: center;
+    }
+  }
+
+  .bank-transfer-info {
     margin-top: 1rem;
+
+    .bank-details {
+      margin-top: 0.5rem;
+
+      p {
+        margin: 0.5rem 0;
+      }
+    }
+  }
+
+  .payment-note {
+    margin-top: 1.5rem;
   }
 }
 

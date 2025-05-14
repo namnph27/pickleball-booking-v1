@@ -78,12 +78,11 @@ export function useBookingService() {
   const processPayment = (paymentData: {
     booking_id: number;
     payment_method: string;
-    card_number?: string;
-    card_holder?: string;
-    expiry_date?: string;
-    cvv?: string;
+    payment_gateway?: string;
+    return_url?: string;
+    cancel_url?: string;
   }) => {
-    return post<{ payment: Payment }>('/api/bookings/payment', paymentData);
+    return post<{ payment: Payment; redirect_url?: string }>('/api/payments', paymentData);
   };
 
   const getPaymentById = (id: number) => {

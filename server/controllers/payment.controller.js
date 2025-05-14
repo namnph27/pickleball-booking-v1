@@ -40,115 +40,64 @@ const processPayment = async (req, res) => {
     }
 
     // Process payment based on payment method
-    let paymentResult;
+    let payment, transactionId, updatedPayment;
 
-    switch (payment_method) {
-      case 'online_payment':
-        // Validate payment gateway
-        if (!payment_gateway) {
-          return res.status(400).json({ message: 'Payment gateway is required for online payment' });
-        }
+    // Validate payment method
+    if (!['online_payment', 'bank_transfer'].includes(payment_method)) {
+      return res.status(400).json({ message: 'Invalid payment method. Supported methods are online_payment and bank_transfer' });
+    }
 
-        // Create payment record
-        const payment = await PaymentService.createPayment({
-          booking_id,
-          user_id: req.user.id,
-          amount: booking.total_price,
-          payment_method,
-          payment_gateway
-        });
+    // For online payment, validate payment gateway
+    if (payment_method === 'online_payment') {
+      if (!payment_gateway) {
+        return res.status(400).json({ message: 'Payment gateway is required for online payment' });
+      }
 
-        // Process payment with gateway
-        paymentResult = await PaymentService.processPaymentWithGateway({
-          payment_id: payment.id,
-          payment_gateway,
-          gateway_data: {
-            returnUrl: return_url || `${req.protocol}://${req.get('host')}/api/payments/${payment_gateway}/callback`,
-            cancelUrl: cancel_url || `${req.protocol}://${req.get('host')}/api/payments/cancel`,
-            ipAddr: req.ip
-          }
-        });
+      if (!['vnpay', 'momo'].includes(payment_gateway)) {
+        return res.status(400).json({ message: 'Invalid payment gateway. Supported gateways are vnpay and momo' });
+      }
+    }
 
-        // Return payment result with redirect URL
-        return res.status(200).json({
-          payment: paymentResult.payment,
-          redirect_url: paymentResult.gateway_result.payUrl || paymentResult.gateway_result
-        });
+    try {
+      // Create payment record
+      payment = await PaymentService.createPayment({
+        booking_id,
+        user_id: req.user.id,
+        amount: booking.total_price,
+        payment_method,
+        payment_gateway: payment_method === 'online_payment' ? payment_gateway : null
+      });
 
-      case 'reward_points':
-        // Check if user has enough reward points
-        const rewardPoints = await User.getRewardPoints(req.user.id);
-        const requiredPoints = booking.total_price * 100; // 1 point = $0.01
+      // Generate transaction ID based on payment method
+      if (payment_method === 'online_payment') {
+        transactionId = `${payment_gateway.toUpperCase()}-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+      } else if (payment_method === 'bank_transfer') {
+        transactionId = `BANK-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+      }
 
-        if (rewardPoints < requiredPoints) {
-          return res.status(400).json({
-            message: 'Insufficient reward points',
-            required_points: requiredPoints,
-            available_points: rewardPoints
-          });
-        }
+      // Update payment status - always successful for demo purposes
+      updatedPayment = await Payment.update(payment.id, {
+        status: 'completed',
+        transaction_id: transactionId,
+        updated_at: new Date()
+      });
 
-        // Create payment record
-        const pointsPayment = await PaymentService.createPayment({
-          booking_id,
-          user_id: req.user.id,
-          amount: booking.total_price,
-          payment_method: 'reward_points'
-        });
+      // Update booking status
+      await Booking.update(booking_id, { status: 'confirmed' });
 
-        // Deduct reward points
-        await User.updateRewardPoints(req.user.id, -requiredPoints);
+      // Generate invoice
+      await PaymentService.generateInvoice(payment.id);
 
-        // Update payment status
-        const updatedPayment = await Payment.update(pointsPayment.id, {
-          status: 'completed',
-          transaction_id: `RP-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-          updated_at: new Date()
-        });
-
-        // Update booking status
-        await Booking.update(booking_id, { status: 'confirmed' });
-
-        // Generate invoice
-        await PaymentService.generateInvoice(pointsPayment.id);
-
-        return res.status(200).json({
-          message: 'Payment processed successfully with reward points',
-          payment: updatedPayment
-        });
-
-      case 'credit_card':
-      case 'paypal':
-        // For backward compatibility
-        // Create payment record
-        const legacyPayment = await PaymentService.createPayment({
-          booking_id,
-          user_id: req.user.id,
-          amount: booking.total_price,
-          payment_method
-        });
-
-        // Update payment status
-        const transactionId = `${payment_method === 'credit_card' ? 'CC' : 'PP'}-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-        const updatedLegacyPayment = await Payment.update(legacyPayment.id, {
-          status: 'completed',
-          transaction_id: transactionId,
-          updated_at: new Date()
-        });
-
-        // Update booking status
-        await Booking.update(booking_id, { status: 'confirmed' });
-
-        // Generate invoice
-        await PaymentService.generateInvoice(legacyPayment.id);
-
-        return res.status(201).json({
-          message: 'Payment processed successfully',
-          payment: updatedLegacyPayment
-        });
-
-      default:
-        return res.status(400).json({ message: 'Invalid payment method' });
+      // Return success response
+      return res.status(200).json({
+        message: payment_method === 'online_payment'
+          ? `Payment processed successfully with ${payment_gateway}`
+          : 'Payment processed successfully with bank transfer',
+        payment: updatedPayment
+      });
+    } catch (error) {
+      console.error('Error processing payment:', error);
+      throw error;
     }
   } catch (error) {
     console.error('Process payment error:', error);

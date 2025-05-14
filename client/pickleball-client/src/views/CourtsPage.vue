@@ -416,16 +416,11 @@ onBeforeUnmount(() => {
               <template #footer>
                 <div class="card-actions">
                   <BaseButton
-                    :label="'Xem chi tiết'"
-                    variant="outline"
-                    icon="pi-id-card"
-                    class="view-details-button"
-                    title="Xem thông tin chi tiết và liên hệ"
-                  />
-                  <BaseButton
                     :label="'Đặt sân ngay'"
                     variant="primary"
                     icon="pi-calendar-plus"
+                    class="book-now-button"
+                    full-width
                   />
                 </div>
               </template>

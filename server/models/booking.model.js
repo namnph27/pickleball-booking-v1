@@ -27,37 +27,110 @@ const Booking = {
       allow_join = false
     } = bookingData;
 
-    const query = `
-      INSERT INTO bookings (
+    // Check if the database has been updated with the new columns
+    let query;
+    let values;
+
+    try {
+      // First, check if the columns exist
+      const checkQuery = `
+        SELECT column_name
+        FROM information_schema.columns
+        WHERE table_name = 'bookings' AND column_name = 'skill_level'
+      `;
+
+      const checkResult = client
+        ? await client.query(checkQuery)
+        : await db.query(checkQuery);
+
+      const hasNewColumns = checkResult.rows.length > 0;
+
+      if (hasNewColumns) {
+        // Use the full query with all columns
+        query = `
+          INSERT INTO bookings (
+            court_id,
+            user_id,
+            start_time,
+            end_time,
+            total_price,
+            status,
+            skill_level,
+            current_players,
+            needed_players,
+            allow_join,
+            created_at,
+            updated_at
+          )
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW())
+          RETURNING *
+        `;
+
+        values = [
+          court_id,
+          user_id,
+          start_time,
+          end_time,
+          total_price,
+          status,
+          skill_level,
+          current_players,
+          needed_players,
+          allow_join
+        ];
+      } else {
+        // Use a simplified query without the new columns
+        query = `
+          INSERT INTO bookings (
+            court_id,
+            user_id,
+            start_time,
+            end_time,
+            total_price,
+            status,
+            created_at,
+            updated_at
+          )
+          VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
+          RETURNING *
+        `;
+
+        values = [
+          court_id,
+          user_id,
+          start_time,
+          end_time,
+          total_price,
+          status
+        ];
+      }
+    } catch (error) {
+      console.error('Error checking columns:', error);
+      // Fallback to basic query
+      query = `
+        INSERT INTO bookings (
+          court_id,
+          user_id,
+          start_time,
+          end_time,
+          total_price,
+          status,
+          created_at,
+          updated_at
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
+        RETURNING *
+      `;
+
+      values = [
         court_id,
         user_id,
         start_time,
         end_time,
         total_price,
-        status,
-        skill_level,
-        current_players,
-        needed_players,
-        allow_join,
-        created_at,
-        updated_at
-      )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW())
-      RETURNING *
-    `;
-
-    const values = [
-      court_id,
-      user_id,
-      start_time,
-      end_time,
-      total_price,
-      status,
-      skill_level,
-      current_players,
-      needed_players,
-      allow_join
-    ];
+        status
+      ];
+    }
 
     try {
       // If client is provided, use it (for transactions)
@@ -65,8 +138,27 @@ const Booking = {
         ? await client.query(query, values)
         : await db.query(query, values);
 
+      if (!result.rows || result.rows.length === 0) {
+        console.error('No booking created, empty result returned');
+        throw new Error('Failed to create booking: No data returned from database');
+      }
+
       return result.rows[0];
     } catch (error) {
+      console.error('Error creating booking:', error);
+
+      // Check for specific PostgreSQL errors
+      if (error.code === '42P01') {
+        // Relation does not exist
+        throw new Error('Database table does not exist. Please run the database setup scripts.');
+      } else if (error.code === '23505') {
+        // Unique violation
+        throw new Error('A booking for this court and time already exists.');
+      } else if (error.code === '23503') {
+        // Foreign key violation
+        throw new Error('Referenced court or user does not exist.');
+      }
+
       throw error;
     }
   },
@@ -283,7 +375,14 @@ const Booking = {
     } = bookingData;
 
     // Start a transaction
-    const client = await db.pool.connect();
+    let client;
+    try {
+      client = await db.pool.connect();
+    } catch (error) {
+      console.error('Error connecting to database:', error);
+      // Try to create the booking without a transaction as a fallback
+      return this.create(bookingData);
+    }
 
     try {
       await client.query('BEGIN');
@@ -303,22 +402,44 @@ const Booking = {
 
       // Check if the time slot is available with FOR UPDATE SKIP LOCKED
       // This ensures we have an exclusive lock on the rows we're checking
-      const availabilityQuery = `
-        SELECT id FROM bookings
-        WHERE
-          court_id = $1 AND
-          status != 'cancelled' AND
-          ((start_time <= $2 AND end_time > $2) OR
-           (start_time < $3 AND end_time >= $3) OR
-           (start_time >= $2 AND end_time <= $3))
-        FOR UPDATE SKIP LOCKED
-      `;
+      try {
+        const availabilityQuery = `
+          SELECT id FROM bookings
+          WHERE
+            court_id = $1 AND
+            status != 'cancelled' AND
+            ((start_time <= $2 AND end_time > $2) OR
+             (start_time < $3 AND end_time >= $3) OR
+             (start_time >= $2 AND end_time <= $3))
+          FOR UPDATE SKIP LOCKED
+        `;
 
-      const availabilityResult = await client.query(availabilityQuery, [court_id, start_time, end_time]);
+        const availabilityResult = await client.query(availabilityQuery, [court_id, start_time, end_time]);
 
-      if (availabilityResult.rows.length > 0) {
-        await client.query('ROLLBACK');
-        throw new Error('The selected time slot is not available');
+        if (availabilityResult.rows.length > 0) {
+          await client.query('ROLLBACK');
+          throw new Error('The selected time slot is not available');
+        }
+      } catch (error) {
+        console.error('Error checking availability:', error);
+        // If there's an error with the FOR UPDATE SKIP LOCKED syntax (older PostgreSQL versions),
+        // try a simpler query
+        const simpleAvailabilityQuery = `
+          SELECT id FROM bookings
+          WHERE
+            court_id = $1 AND
+            status != 'cancelled' AND
+            ((start_time <= $2 AND end_time > $2) OR
+             (start_time < $3 AND end_time >= $3) OR
+             (start_time >= $2 AND end_time <= $3))
+        `;
+
+        const simpleAvailabilityResult = await client.query(simpleAvailabilityQuery, [court_id, start_time, end_time]);
+
+        if (simpleAvailabilityResult.rows.length > 0) {
+          await client.query('ROLLBACK');
+          throw new Error('The selected time slot is not available');
+        }
       }
 
       // Create the booking
@@ -338,10 +459,30 @@ const Booking = {
       await client.query('COMMIT');
       return newBooking;
     } catch (error) {
-      await client.query('ROLLBACK');
+      console.error('Error in createWithLock:', error);
+      try {
+        await client.query('ROLLBACK');
+      } catch (rollbackError) {
+        console.error('Error rolling back transaction:', rollbackError);
+      }
+
+      // If there was an error with the transaction, try to create the booking without a transaction
+      if (error.message !== 'The selected time slot is not available' &&
+          error.message !== 'Court not found or not available') {
+        console.log('Attempting to create booking without transaction...');
+        try {
+          return await this.create(bookingData);
+        } catch (createError) {
+          console.error('Error creating booking without transaction:', createError);
+          throw createError;
+        }
+      }
+
       throw error;
     } finally {
-      client.release();
+      if (client) {
+        client.release();
+      }
     }
   },
 

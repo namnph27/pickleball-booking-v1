@@ -204,6 +204,7 @@
     "newPassword": "New Password"
   },
   "courts": {
+    "copyTimeslotsDescription": "Copy timeslots from a day of week to a specific date",
     "findCourts": "Find Pickleball Courts",
     "searchPlaceholder": "Search by name or location",
     "filterBySkill": "Filter by skill level:",
@@ -238,9 +239,12 @@
     "noAvailabilityForDate": "No availability for this date"
   },
   "booking": {
+    "selectGateway": "Select Payment Gateway",
+    "bookCourts": "Book Courts",
     "bookCourt": "Book Court",
     "selectDate": "Select Date",
     "selectTime": "Select Time",
+    "selectedTime": "Selected Time",
     "duration": "Duration",
     "hours": "hours",
     "totalPrice": "Total Price",
@@ -248,9 +252,19 @@
     "applyPromo": "Apply",
     "discount": "Discount",
     "paymentMethod": "Payment Method",
-    "creditCard": "Credit Card",
-    "debitCard": "Debit Card",
-    "paypal": "PayPal",
+    "selectPaymentMethod": "Select Payment Method",
+    "onlinePayment": "Online Payment",
+    "bankTransfer": "Bank Transfer",
+    "selectPaymentGateway": "Select Payment Gateway",
+    "bankTransferInfo": "Bank Transfer Information",
+    "bankName": "Bank Name",
+    "accountNumber": "Account Number",
+    "accountName": "Account Name",
+    "transferContent": "Transfer Content",
+    "demoPaymentNote": "Note: This is a demo, all payment methods will be processed automatically without requiring real information.",
+    "price": "Price",
+    "orderSummary": "Order Summary",
+    "subtotal": "Subtotal",
     "confirmBooking": "Confirm Booking",
     "bookingConfirmed": "Booking Confirmed",
     "bookingDetails": "Booking Details",
@@ -703,3 +717,4 @@
     "allRightsReserved": "All Rights Reserved."
   }
 }
+

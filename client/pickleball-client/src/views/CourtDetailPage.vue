@@ -321,13 +321,7 @@ watch(selectedDate, () => {
 
           <div class="details-section">
             <h2 class="section-title">{{ t('courts.location') }}</h2>
-            <div class="location-map">
-              <!-- Map placeholder - would be replaced with actual map component -->
-              <div class="map-placeholder">
-                <i class="pi pi-map"></i>
-                <span>{{ t('courts.mapPlaceholder') }}</span>
-              </div>
-
+            <div class="location-info">
               <div class="location-address">
                 <i class="pi pi-map-marker"></i>
                 <span>{{ court.location }}</span>
@@ -631,23 +625,10 @@ watch(selectedDate, () => {
     }
   }
 
-  .location-map {
-    .map-placeholder {
-      height: 200px;
-      background-color: var(--light-gray);
-      border-radius: 8px;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      color: var(--dark-gray);
-      margin-bottom: 1rem;
-
-      i {
-        font-size: 2rem;
-        margin-bottom: 0.5rem;
-      }
-    }
+  .location-info {
+    background-color: var(--light-gray);
+    border-radius: 8px;
+    padding: 1.5rem;
 
     .location-address,
     .location-district {
@@ -655,6 +636,7 @@ watch(selectedDate, () => {
       align-items: center;
       gap: 0.5rem;
       margin-top: 0.75rem;
+      font-size: 1.1rem;
 
       i {
         color: var(--primary-color);

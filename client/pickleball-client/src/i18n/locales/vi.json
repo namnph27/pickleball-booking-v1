@@ -202,6 +202,7 @@
     "newPassword": "Mật khẩu mới"
   },
   "courts": {
+    "court": "Sân",
     "findCourts": "Tìm sân Pickleball",
     "searchPlaceholder": "Tìm kiếm theo tên hoặc vị trí",
     "filterBySkill": "Lọc theo cấp độ kỹ năng:",
@@ -236,9 +237,11 @@
     "noAvailabilityForDate": "Không có khung giờ nào cho ngày này"
   },
   "booking": {
+    "selectGateway": "Chọn cổng thanh toán",
     "bookCourt": "Đặt sân",
     "selectDate": "Chọn ngày",
     "selectTime": "Chọn thời gian",
+    "selectedTime": "Thời gian đã chọn",
     "duration": "Thời lượng",
     "hours": "giờ",
     "totalPrice": "Tổng giá",
@@ -246,9 +249,19 @@
     "applyPromo": "Áp dụng",
     "discount": "Giảm giá",
     "paymentMethod": "Phương thức thanh toán",
-    "creditCard": "Thẻ tín dụng",
-    "debitCard": "Thẻ ghi nợ",
-    "paypal": "PayPal",
+    "selectPaymentMethod": "Chọn phương thức thanh toán",
+    "onlinePayment": "Thanh toán trực tuyến",
+    "bankTransfer": "Chuyển khoản ngân hàng",
+    "selectPaymentGateway": "Chọn cổng thanh toán",
+    "bankTransferInfo": "Thông tin chuyển khoản",
+    "bankName": "Tên ngân hàng",
+    "accountNumber": "Số tài khoản",
+    "accountName": "Tên tài khoản",
+    "transferContent": "Nội dung chuyển khoản",
+    "demoPaymentNote": "Lưu ý: Đây là bản demo, tất cả các phương thức thanh toán sẽ được xử lý tự động mà không cần thông tin thực.",
+    "price": "Giá",
+    "orderSummary": "Tóm tắt đơn hàng",
+    "subtotal": "Tạm tính",
     "confirmBooking": "Xác nhận đặt sân",
     "bookingConfirmed": "Đặt sân đã được xác nhận",
     "bookingDetails": "Chi tiết đặt sân",
@@ -369,6 +382,7 @@
     "totalRevenue": "Tổng doanh thu"
   },
   "courtOwner": {
+    "copyTimeslotsDescription": "Sao chép khung giờ từ một ngày trong tuần sang ngày cụ thể",
     "myCourts": "Sân của tôi",
     "addCourt": "Thêm sân mới",
     "editCourt": "Chỉnh sửa sân",
@@ -701,3 +715,5 @@
     "allRightsReserved": "Tất cả quyền được bảo lưu."
   }
 }
+
+
