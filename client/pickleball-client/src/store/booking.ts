@@ -20,19 +20,117 @@ export const useBookingStore = defineStore('booking', () => {
 
   // Computed properties
   const upcomingBookings = computed(() => {
-    return bookings.value.filter(booking =>
-      booking.status !== 'cancelled' &&
-      booking.status !== 'completed' &&
-      new Date(booking.start_time) > new Date()
-    ).sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime());
+    try {
+      if (!bookings.value || !Array.isArray(bookings.value)) {
+        console.error('BookingStore: bookings is not an array:', bookings.value);
+        return [];
+      }
+
+      return bookings.value.filter(booking => {
+        try {
+          if (!booking) {
+            console.warn('BookingStore: Invalid booking object in upcomingBookings filter');
+            return false;
+          }
+
+          // Check if start_time is valid
+          if (!booking.start_time) {
+            console.warn('BookingStore: Missing start_time in booking:', booking.id);
+            return false;
+          }
+
+          const startTime = new Date(booking.start_time);
+
+          // Check if date is valid
+          if (isNaN(startTime.getTime())) {
+            console.error('BookingStore: Invalid start_time in booking:', booking.id, booking.start_time);
+            return false;
+          }
+
+          return booking.status !== 'cancelled' &&
+                 booking.status !== 'completed' &&
+                 startTime > new Date();
+        } catch (error) {
+          console.error('BookingStore: Error filtering upcoming booking:', error, booking);
+          return false;
+        }
+      }).sort((a, b) => {
+        try {
+          const aTime = new Date(a.start_time).getTime();
+          const bTime = new Date(b.start_time).getTime();
+
+          if (isNaN(aTime) || isNaN(bTime)) {
+            console.error('BookingStore: Invalid date in sort:', a.start_time, b.start_time);
+            return 0;
+          }
+
+          return aTime - bTime;
+        } catch (error) {
+          console.error('BookingStore: Error sorting upcoming bookings:', error);
+          return 0;
+        }
+      });
+    } catch (error) {
+      console.error('BookingStore: Error computing upcomingBookings:', error);
+      return [];
+    }
   });
 
   const pastBookings = computed(() => {
-    return bookings.value.filter(booking =>
-      booking.status === 'completed' ||
-      booking.status === 'cancelled' ||
-      new Date(booking.start_time) <= new Date()
-    ).sort((a, b) => new Date(b.start_time).getTime() - new Date(a.start_time).getTime());
+    try {
+      if (!bookings.value || !Array.isArray(bookings.value)) {
+        console.error('BookingStore: bookings is not an array:', bookings.value);
+        return [];
+      }
+
+      return bookings.value.filter(booking => {
+        try {
+          if (!booking) {
+            console.warn('BookingStore: Invalid booking object in pastBookings filter');
+            return false;
+          }
+
+          // Check if start_time is valid
+          if (!booking.start_time) {
+            console.warn('BookingStore: Missing start_time in booking:', booking.id);
+            return false;
+          }
+
+          const startTime = new Date(booking.start_time);
+
+          // Check if date is valid
+          if (isNaN(startTime.getTime())) {
+            console.error('BookingStore: Invalid start_time in booking:', booking.id, booking.start_time);
+            return false;
+          }
+
+          return booking.status === 'completed' ||
+                 booking.status === 'cancelled' ||
+                 startTime <= new Date();
+        } catch (error) {
+          console.error('BookingStore: Error filtering past booking:', error, booking);
+          return false;
+        }
+      }).sort((a, b) => {
+        try {
+          const aTime = new Date(a.start_time).getTime();
+          const bTime = new Date(b.start_time).getTime();
+
+          if (isNaN(aTime) || isNaN(bTime)) {
+            console.error('BookingStore: Invalid date in sort:', a.start_time, b.start_time);
+            return 0;
+          }
+
+          return bTime - aTime; // Sort in descending order (newest first)
+        } catch (error) {
+          console.error('BookingStore: Error sorting past bookings:', error);
+          return 0;
+        }
+      });
+    } catch (error) {
+      console.error('BookingStore: Error computing pastBookings:', error);
+      return [];
+    }
   });
 
   // Create a new booking
@@ -62,13 +160,43 @@ export const useBookingStore = defineStore('booking', () => {
   async function getUserBookings() {
     loading.value = true;
     error.value = null;
+    console.log('BookingStore: Getting user bookings...');
 
     try {
+      // Reset bookings array before fetching new data
+      bookings.value = [];
+
       const response = await bookingService.getUserBookings();
-      bookings.value = response.bookings;
-      return response.bookings;
+      console.log('BookingStore: User bookings response:', response);
+
+      if (response && response.bookings) {
+        console.log('BookingStore: Setting bookings:', response.bookings);
+
+        // Ensure all required fields are present in each booking
+        const processedBookings = response.bookings.map(booking => ({
+          ...booking,
+          // Provide default values for potentially missing fields
+          court_name: booking.court_name || 'Unknown Court',
+          location: booking.location || 'Unknown Location',
+          image_url: booking.image_url || '',
+          // Format dates if needed
+          start_time: booking.start_time,
+          end_time: booking.end_time,
+          // Ensure numeric values
+          total_price: typeof booking.total_price === 'number' ? booking.total_price : parseFloat(booking.total_price) || 0
+        }));
+
+        bookings.value = processedBookings;
+        return processedBookings;
+      } else {
+        console.log('BookingStore: No bookings found in response or empty array returned');
+        // Return empty array instead of throwing an error
+        bookings.value = [];
+        return [];
+      }
     } catch (err: any) {
-      error.value = typeof err === 'string' ? err : 'Failed to fetch bookings';
+      console.error('BookingStore: Error fetching bookings:', err);
+      error.value = typeof err === 'string' ? err : (err.message || 'Failed to fetch bookings');
       throw error.value;
     } finally {
       loading.value = false;
@@ -121,14 +249,30 @@ export const useBookingStore = defineStore('booking', () => {
   }
 
   // Get court bookings (for court owners)
-  async function getCourtBookings(courtId: number) {
+  async function getCourtBookings(courtId: number, append: boolean = false) {
     loading.value = true;
     error.value = null;
 
     try {
       const response = await bookingService.getCourtBookings(courtId);
-      bookings.value = response.bookings;
-      return response.bookings;
+
+      // Process the bookings to ensure they have court_id
+      const processedBookings = response.bookings.map(booking => ({
+        ...booking,
+        court_id: booking.court_id || courtId,
+      }));
+
+      if (append) {
+        // Append new bookings to the existing array, avoiding duplicates
+        const existingIds = new Set(bookings.value.map(b => b.id));
+        const newBookings = processedBookings.filter(b => !existingIds.has(b.id));
+        bookings.value = [...bookings.value, ...newBookings];
+      } else {
+        // Replace all bookings
+        bookings.value = processedBookings;
+      }
+
+      return processedBookings;
     } catch (err: any) {
       error.value = typeof err === 'string' ? err : 'Failed to fetch court bookings';
       throw error.value;

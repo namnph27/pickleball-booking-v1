@@ -23,6 +23,9 @@ const loading = ref(false);
 const selectedOwner = ref(null);
 const approvalDialog = ref(false);
 const rejectionDialog = ref(false);
+const successDialog = ref(false);
+const successTitle = ref('');
+const successMessage = ref('');
 const adminNotes = ref('');
 const searchQuery = ref('');
 const activeTab = ref(0);
@@ -130,6 +133,25 @@ const openRejectionDialog = (owner) => {
   rejectionDialog.value = true;
 };
 
+const getStatusIcon = (status) => {
+  switch (status) {
+    case 'pending':
+      return 'pi-clock';
+    case 'approved':
+      return 'pi-check-circle';
+    case 'rejected':
+      return 'pi-times-circle';
+    default:
+      return 'pi-question-circle';
+  }
+};
+
+const showSuccessDialog = (title, message) => {
+  successTitle.value = title;
+  successMessage.value = message;
+  successDialog.value = true;
+};
+
 const approveCourtOwner = async () => {
   try {
     loading.value = true;
@@ -151,9 +173,14 @@ const approveCourtOwner = async () => {
       notes: adminNotes.value
     }, { headers });
 
-    toast.success(t('admin.courtOwnerApproved'));
-
     approvalDialog.value = false;
+
+    // Show success dialog instead of toast
+    showSuccessDialog(
+      t('admin.courtOwnerApproved'),
+      `${selectedOwner.value.name} (${selectedOwner.value.email}) ${t('admin.courtOwnerApproved').toLowerCase()}.`
+    );
+
     await fetchCourtOwners('pending');
   } catch (error) {
     console.error('Error approving court owner:', error);
@@ -169,6 +196,12 @@ const approveCourtOwner = async () => {
 
 const rejectCourtOwner = async () => {
   try {
+    // Validate rejection reason
+    if (!adminNotes.value || adminNotes.value.trim() === '') {
+      toast.error(t('admin.rejectionReasonRequired'));
+      return;
+    }
+
     loading.value = true;
 
     // Kiểm tra lại token trước khi gọi API
@@ -188,9 +221,14 @@ const rejectCourtOwner = async () => {
       notes: adminNotes.value
     }, { headers });
 
-    toast.success(t('admin.courtOwnerRejected'));
-
     rejectionDialog.value = false;
+
+    // Show success dialog instead of toast
+    showSuccessDialog(
+      t('admin.courtOwnerRejected'),
+      `${selectedOwner.value.name} (${selectedOwner.value.email}) ${t('admin.courtOwnerRejected').toLowerCase()}.`
+    );
+
     await fetchCourtOwners('pending');
   } catch (error) {
     console.error('Error rejecting court owner:', error);
@@ -236,147 +274,192 @@ onMounted(() => {
 <template>
   <AdminLayout>
     <template #header>
-      <h1 class="admin-page-title">{{ t('admin.courtOwnerManagement') }}</h1>
+      <div class="admin-header">
+        <h1 class="admin-page-title">{{ t('admin.courtOwnerManagement') }}</h1>
+        <p class="admin-page-subtitle">{{ t('admin.courtOwnerManagement') + ' - ' + statusOptions[activeTab].label }}</p>
+      </div>
     </template>
 
     <div class="court-owners-container">
-      <div class="filters">
+      <div class="filters-section">
         <div class="search-container">
           <span class="p-input-icon-left">
             <i class="pi pi-search" />
             <InputText
               v-model="searchQuery"
-              :placeholder="t('common.search')"
+              :placeholder="t('common.search') + '...'"
               class="search-input"
             />
           </span>
         </div>
+        <div class="filter-info">
+          <span v-if="filteredCourtOwners.length > 0">
+            {{ filteredCourtOwners.length }} {{ filteredCourtOwners.length === 1 ? 'chủ sân' : 'chủ sân' }}
+          </span>
+          <span v-else>{{ t('common.noResults') }}</span>
+        </div>
       </div>
 
-      <TabView @tab-change="handleTabChange">
-        <TabPanel v-for="(option, index) in statusOptions" :key="index" :header="option.label">
-          <DataTable
-            :value="filteredCourtOwners"
-            :loading="loading"
-            :paginator="true"
-            :rows="10"
-            :rowsPerPageOptions="[5, 10, 20, 50]"
-            responsiveLayout="scroll"
-            class="court-owners-table"
-            stripedRows
-          >
-            <Column field="id" header="ID" sortable style="width: 5%"></Column>
-            <Column field="name" :header="t('common.name')" sortable style="width: 15%"></Column>
-            <Column field="email" :header="t('common.email')" sortable style="width: 15%"></Column>
-            <Column field="phone" :header="t('common.phone')" sortable style="width: 10%"></Column>
-            <Column field="id_card" :header="t('auth.idCard')" style="width: 10%"></Column>
-            <Column field="tax_code" :header="t('auth.taxCode')" style="width: 10%"></Column>
-            <Column field="created_at" :header="t('common.registeredAt')" sortable style="width: 15%">
-              <template #body="{ data }">
-                {{ formatDate(data.created_at) }}
-              </template>
-            </Column>
-            <Column :header="t('common.actions')" style="width: 20%">
-              <template #body="{ data }">
-                <div class="action-buttons">
-                  <Button
-                    v-if="activeTab === 0"
-                    icon="pi pi-check"
-                    class="p-button-success p-button-sm"
-                    @click="openApprovalDialog(data)"
-                    :title="t('admin.approve')"
-                  />
-                  <Button
-                    v-if="activeTab === 0"
-                    icon="pi pi-times"
-                    class="p-button-danger p-button-sm"
-                    @click="openRejectionDialog(data)"
-                    :title="t('admin.reject')"
-                  />
-                  <Button
-                    v-if="activeTab !== 0"
-                    icon="pi pi-eye"
-                    class="p-button-info p-button-sm"
-                    @click="openApprovalDialog(data)"
-                    :title="t('common.view')"
-                  />
-                </div>
-              </template>
-            </Column>
-          </DataTable>
-        </TabPanel>
-      </TabView>
+      <div class="tab-container">
+        <TabView @tab-change="handleTabChange" class="custom-tabview">
+          <TabPanel v-for="(option, index) in statusOptions" :key="index" :header="option.label">
+            <div class="table-container">
+              <DataTable
+                :value="filteredCourtOwners"
+                :loading="loading"
+                :paginator="true"
+                :rows="10"
+                :rowsPerPageOptions="[5, 10, 20, 50]"
+                responsiveLayout="scroll"
+                class="court-owners-table"
+                stripedRows
+                :emptyMessage="t('common.noResults')"
+                v-tooltip.top="t('common.refresh')"
+              >
+                <Column field="id" header="ID" sortable style="width: 5%"></Column>
+                <Column field="name" :header="t('common.name')" sortable style="width: 15%"></Column>
+                <Column field="email" :header="t('common.email')" sortable style="width: 15%"></Column>
+                <Column field="phone" :header="t('common.phone')" sortable style="width: 10%"></Column>
+                <Column field="id_card" :header="t('auth.idCard')" style="width: 10%"></Column>
+                <Column field="tax_code" :header="t('auth.taxCode')" style="width: 10%"></Column>
+                <Column field="created_at" :header="t('common.registeredAt')" sortable style="width: 15%">
+                  <template #body="{ data }">
+                    <span class="date-cell">{{ formatDate(data.created_at) }}</span>
+                  </template>
+                </Column>
+                <Column :header="t('common.status')" style="width: 10%">
+                  <template #body="{ data }">
+                    <span class="status-badge" :class="'status-' + data.approval_status">
+                      {{ t('admin.' + data.approval_status) }}
+                    </span>
+                  </template>
+                </Column>
+                <Column :header="t('common.actions')" style="width: 10%">
+                  <template #body="{ data }">
+                    <div class="action-buttons">
+                      <Button
+                        v-if="activeTab === 0"
+                        icon="pi pi-check"
+                        class="p-button-success p-button-rounded"
+                        @click="openApprovalDialog(data)"
+                        v-tooltip.top="t('admin.approve')"
+                      />
+                      <Button
+                        v-if="activeTab === 0"
+                        icon="pi pi-times"
+                        class="p-button-danger p-button-rounded"
+                        @click="openRejectionDialog(data)"
+                        v-tooltip.top="t('admin.reject')"
+                      />
+                      <Button
+                        v-if="activeTab !== 0"
+                        icon="pi pi-eye"
+                        class="p-button-info p-button-rounded"
+                        @click="openApprovalDialog(data)"
+                        v-tooltip.top="t('common.view')"
+                      />
+                    </div>
+                  </template>
+                </Column>
+              </DataTable>
+            </div>
+          </TabPanel>
+        </TabView>
+      </div>
     </div>
 
     <!-- Approval Dialog -->
     <Dialog
       v-model:visible="approvalDialog"
       :header="activeTab === 0 ? t('admin.approveCourtOwner') : t('admin.viewCourtOwner')"
-      :style="{ width: '500px' }"
+      :style="{ width: '550px' }"
       :modal="true"
+      :closable="!loading"
+      :closeOnEscape="!loading"
+      class="court-owner-dialog"
     >
-      <div class="owner-details" v-if="selectedOwner">
-        <div class="detail-row">
-          <span class="detail-label">{{ t('common.name') }}:</span>
-          <span class="detail-value">{{ selectedOwner.name }}</span>
-        </div>
-        <div class="detail-row">
-          <span class="detail-label">{{ t('common.email') }}:</span>
-          <span class="detail-value">{{ selectedOwner.email }}</span>
-        </div>
-        <div class="detail-row">
-          <span class="detail-label">{{ t('common.phone') }}:</span>
-          <span class="detail-value">{{ selectedOwner.phone }}</span>
-        </div>
-        <div class="detail-row">
-          <span class="detail-label">{{ t('auth.idCard') }}:</span>
-          <span class="detail-value">{{ selectedOwner.id_card }}</span>
-        </div>
-        <div class="detail-row">
-          <span class="detail-label">{{ t('auth.taxCode') }}:</span>
-          <span class="detail-value">{{ selectedOwner.tax_code }}</span>
-        </div>
-        <div class="detail-row">
-          <span class="detail-label">{{ t('common.registeredAt') }}:</span>
-          <span class="detail-value">{{ formatDate(selectedOwner.created_at) }}</span>
+      <div class="owner-details-container" v-if="selectedOwner">
+        <div class="status-header" :class="'status-' + (selectedOwner.approval_status || 'pending')">
+          <i class="pi" :class="getStatusIcon(selectedOwner.approval_status)"></i>
+          <span>{{ t('admin.' + (selectedOwner.approval_status || 'pending')) }}</span>
         </div>
 
-        <div class="admin-notes-container">
-          <label for="admin-notes">{{ t('admin.adminNotes') }}</label>
-          <Textarea
-            id="admin-notes"
-            v-model="adminNotes"
-            :placeholder="t('admin.enterNotes')"
-            rows="4"
-            class="w-full"
-            :disabled="activeTab !== 0"
-          />
+        <div class="owner-details">
+          <div class="detail-section">
+            <h3 class="section-title">{{ t('common.personalInfo') }}</h3>
+            <div class="detail-row">
+              <span class="detail-label">{{ t('common.name') }}:</span>
+              <span class="detail-value">{{ selectedOwner.name }}</span>
+            </div>
+            <div class="detail-row">
+              <span class="detail-label">{{ t('common.email') }}:</span>
+              <span class="detail-value">{{ selectedOwner.email }}</span>
+            </div>
+            <div class="detail-row">
+              <span class="detail-label">{{ t('common.phone') }}:</span>
+              <span class="detail-value">{{ selectedOwner.phone }}</span>
+            </div>
+          </div>
+
+          <div class="detail-section">
+            <h3 class="section-title">{{ t('profile.businessInfo') }}</h3>
+            <div class="detail-row">
+              <span class="detail-label">{{ t('auth.idCard') }}:</span>
+              <span class="detail-value">{{ selectedOwner.id_card }}</span>
+            </div>
+            <div class="detail-row">
+              <span class="detail-label">{{ t('auth.taxCode') }}:</span>
+              <span class="detail-value">{{ selectedOwner.tax_code }}</span>
+            </div>
+            <div class="detail-row">
+              <span class="detail-label">{{ t('common.registeredAt') }}:</span>
+              <span class="detail-value">{{ formatDate(selectedOwner.created_at) }}</span>
+            </div>
+          </div>
+
+          <div class="admin-notes-container">
+            <label for="admin-notes">
+              {{ activeTab === 0 ? t('admin.adminNotes') : t('admin.adminNotes') + ' (' + t('common.readonly') + ')' }}
+            </label>
+            <Textarea
+              id="admin-notes"
+              v-model="adminNotes"
+              :placeholder="t('admin.enterNotes')"
+              rows="4"
+              class="w-full"
+              :disabled="activeTab !== 0"
+            />
+          </div>
         </div>
       </div>
 
       <template #footer>
-        <Button
-          v-if="activeTab === 0"
-          :label="t('common.cancel')"
-          icon="pi pi-times"
-          class="p-button-text"
-          @click="approvalDialog = false"
-        />
-        <Button
-          v-if="activeTab === 0"
-          :label="t('admin.approve')"
-          icon="pi pi-check"
-          class="p-button-success"
-          @click="approveCourtOwner"
-          :loading="loading"
-        />
-        <Button
-          v-if="activeTab !== 0"
-          :label="t('common.close')"
-          icon="pi pi-times"
-          class="p-button-text"
-          @click="approvalDialog = false"
-        />
+        <div class="dialog-footer">
+          <Button
+            v-if="activeTab === 0"
+            :label="t('common.cancel')"
+            icon="pi pi-times"
+            class="p-button-text"
+            @click="approvalDialog = false"
+            :disabled="loading"
+          />
+          <Button
+            v-if="activeTab === 0"
+            :label="t('admin.approve')"
+            icon="pi pi-check"
+            class="p-button-success"
+            @click="approveCourtOwner"
+            :loading="loading"
+            :disabled="loading"
+          />
+          <Button
+            v-if="activeTab !== 0"
+            :label="t('common.close')"
+            icon="pi pi-times"
+            class="p-button-text"
+            @click="approvalDialog = false"
+          />
+        </div>
       </template>
     </Dialog>
 
@@ -384,44 +467,95 @@ onMounted(() => {
     <Dialog
       v-model:visible="rejectionDialog"
       :header="t('admin.rejectCourtOwner')"
-      :style="{ width: '500px' }"
+      :style="{ width: '550px' }"
       :modal="true"
+      :closable="!loading"
+      :closeOnEscape="!loading"
+      class="court-owner-dialog rejection-dialog"
     >
-      <div class="owner-details" v-if="selectedOwner">
-        <div class="detail-row">
-          <span class="detail-label">{{ t('common.name') }}:</span>
-          <span class="detail-value">{{ selectedOwner.name }}</span>
-        </div>
-        <div class="detail-row">
-          <span class="detail-label">{{ t('common.email') }}:</span>
-          <span class="detail-value">{{ selectedOwner.email }}</span>
+      <div class="owner-details-container" v-if="selectedOwner">
+        <div class="status-header status-warning">
+          <i class="pi pi-exclamation-triangle"></i>
+          <span>{{ t('admin.rejectCourtOwner') }}</span>
         </div>
 
-        <div class="admin-notes-container">
-          <label for="rejection-notes">{{ t('admin.rejectionReason') }}</label>
-          <Textarea
-            id="rejection-notes"
-            v-model="adminNotes"
-            :placeholder="t('admin.enterRejectionReason')"
-            rows="4"
-            class="w-full"
-          />
+        <div class="owner-details">
+          <div class="detail-section">
+            <h3 class="section-title">{{ t('common.personalInfo') }}</h3>
+            <div class="detail-row">
+              <span class="detail-label">{{ t('common.name') }}:</span>
+              <span class="detail-value">{{ selectedOwner.name }}</span>
+            </div>
+            <div class="detail-row">
+              <span class="detail-label">{{ t('common.email') }}:</span>
+              <span class="detail-value">{{ selectedOwner.email }}</span>
+            </div>
+            <div class="detail-row">
+              <span class="detail-label">{{ t('common.phone') }}:</span>
+              <span class="detail-value">{{ selectedOwner.phone }}</span>
+            </div>
+          </div>
+
+          <div class="rejection-warning">
+            <i class="pi pi-info-circle"></i>
+            <span>{{ t('auth.rejectedAccountDeletionWarning') }}</span>
+          </div>
+
+          <div class="admin-notes-container">
+            <label for="rejection-notes">{{ t('admin.rejectionReason') }} <span class="required">*</span></label>
+            <Textarea
+              id="rejection-notes"
+              v-model="adminNotes"
+              :placeholder="t('admin.enterRejectionReason')"
+              rows="4"
+              class="w-full"
+              required
+            />
+            <small class="rejection-note-hint">{{ t('auth.rejectedAccountDeletionNotice') }}</small>
+          </div>
         </div>
       </div>
 
       <template #footer>
+        <div class="dialog-footer">
+          <Button
+            :label="t('common.cancel')"
+            icon="pi pi-times"
+            class="p-button-text"
+            @click="rejectionDialog = false"
+            :disabled="loading"
+          />
+          <Button
+            :label="t('admin.reject')"
+            icon="pi pi-times"
+            class="p-button-danger"
+            @click="rejectCourtOwner"
+            :loading="loading"
+            :disabled="loading || !adminNotes"
+          />
+        </div>
+      </template>
+    </Dialog>
+
+    <!-- Success Dialog -->
+    <Dialog
+      v-model:visible="successDialog"
+      :header="successTitle"
+      :style="{ width: '400px' }"
+      :modal="true"
+      class="success-dialog"
+    >
+      <div class="success-content">
+        <i class="pi pi-check-circle"></i>
+        <p>{{ successMessage }}</p>
+      </div>
+
+      <template #footer>
         <Button
-          :label="t('common.cancel')"
+          :label="t('common.close')"
           icon="pi pi-times"
           class="p-button-text"
-          @click="rejectionDialog = false"
-        />
-        <Button
-          :label="t('admin.reject')"
-          icon="pi pi-times"
-          class="p-button-danger"
-          @click="rejectCourtOwner"
-          :loading="loading"
+          @click="successDialog = false"
         />
       </template>
     </Dialog>
@@ -429,35 +563,317 @@ onMounted(() => {
 </template>
 
 <style scoped lang="scss">
-.court-owners-container {
-  background-color: white;
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  padding: 1.5rem;
+.admin-header {
+  margin-bottom: 1.5rem;
+
+  .admin-page-title {
+    font-size: 1.8rem;
+    font-weight: 600;
+    color: #0A2342;
+    margin-bottom: 0.5rem;
+  }
+
+  .admin-page-subtitle {
+    font-size: 1rem;
+    color: #666;
+    margin: 0;
+  }
 }
 
-.filters {
+.court-owners-container {
+  background-color: white;
+  border-radius: 12px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+  padding: 1.5rem;
+  margin-bottom: 2rem;
+}
+
+.filters-section {
   display: flex;
   justify-content: space-between;
-  margin-bottom: 1rem;
+  align-items: center;
+  margin-bottom: 1.5rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid #f0f0f0;
 
   .search-container {
     width: 100%;
-    max-width: 300px;
+    max-width: 350px;
 
     .search-input {
       width: 100%;
+      border-radius: 8px;
+      padding: 0.75rem 0.75rem 0.75rem 2.5rem;
+      font-size: 1rem;
+      border: 1px solid #e0e0e0;
+      transition: all 0.3s ease;
+
+      &:focus {
+        border-color: #2196F3;
+        box-shadow: 0 0 0 2px rgba(33, 150, 243, 0.2);
+      }
+    }
+
+    .pi-search {
+      left: 0.75rem;
+      color: #666;
+    }
+  }
+
+  .filter-info {
+    font-size: 0.9rem;
+    color: #666;
+    padding: 0.5rem 1rem;
+    background-color: #f9f9f9;
+    border-radius: 8px;
+  }
+}
+
+.tab-container {
+  .custom-tabview {
+    :deep(.p-tabview-nav) {
+      border-bottom: 2px solid #f0f0f0;
+
+      li {
+        margin-right: 0.5rem;
+
+        .p-tabview-nav-link {
+          padding: 1rem 1.5rem;
+          border-radius: 8px 8px 0 0;
+          font-weight: 500;
+          transition: all 0.3s ease;
+
+          &:not(.p-disabled):focus {
+            box-shadow: none;
+          }
+        }
+
+        &.p-highlight .p-tabview-nav-link {
+          background-color: #f0f7ff;
+          color: #2196F3;
+          border-color: #2196F3;
+        }
+      }
+    }
+
+    :deep(.p-tabview-panels) {
+      padding: 1.5rem 0 0 0;
+    }
+  }
+
+  .table-container {
+    .court-owners-table {
+      :deep(.p-datatable-header) {
+        background-color: #f9f9f9;
+        border-radius: 8px 8px 0 0;
+      }
+
+      :deep(.p-datatable-thead) {
+        tr th {
+          background-color: #f5f5f5;
+          padding: 1rem;
+          font-weight: 600;
+          color: #333;
+        }
+      }
+
+      :deep(.p-datatable-tbody) {
+        tr td {
+          padding: 0.75rem 1rem;
+          border-bottom: 1px solid #f0f0f0;
+
+          &:first-child {
+            border-top-left-radius: 8px;
+            border-bottom-left-radius: 8px;
+          }
+
+          &:last-child {
+            border-top-right-radius: 8px;
+            border-bottom-right-radius: 8px;
+          }
+        }
+
+        tr:hover {
+          background-color: #f9f9f9;
+        }
+      }
+
+      :deep(.p-paginator) {
+        padding: 1rem;
+        border-radius: 0 0 8px 8px;
+      }
     }
   }
 }
 
 .action-buttons {
   display: flex;
-  gap: 0.5rem;
+  gap: 0.75rem;
+  justify-content: center;
+
+  :deep(.p-button) {
+    width: 2.5rem;
+    height: 2.5rem;
+
+    &.p-button-rounded {
+      border-radius: 50%;
+    }
+
+    &.p-button-success {
+      background-color: #4CAF50;
+      border-color: #4CAF50;
+
+      &:hover {
+        background-color: #388E3C;
+        border-color: #388E3C;
+      }
+    }
+
+    &.p-button-danger {
+      background-color: #F44336;
+      border-color: #F44336;
+
+      &:hover {
+        background-color: #D32F2F;
+        border-color: #D32F2F;
+      }
+    }
+
+    &.p-button-info {
+      background-color: #2196F3;
+      border-color: #2196F3;
+
+      &:hover {
+        background-color: #1976D2;
+        border-color: #1976D2;
+      }
+    }
+  }
+}
+
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.4rem 0.8rem;
+  border-radius: 50px;
+  font-size: 0.85rem;
+  font-weight: 500;
+
+  &.status-pending {
+    background-color: #FFF8E1;
+    color: #FFA000;
+    border: 1px solid #FFECB3;
+  }
+
+  &.status-approved {
+    background-color: #E8F5E9;
+    color: #388E3C;
+    border: 1px solid #C8E6C9;
+  }
+
+  &.status-rejected {
+    background-color: #FFEBEE;
+    color: #D32F2F;
+    border: 1px solid #FFCDD2;
+  }
+}
+
+.date-cell {
+  font-size: 0.9rem;
+  color: #666;
+}
+
+.court-owner-dialog {
+  :deep(.p-dialog-header) {
+    padding: 1.5rem;
+    background-color: #f9f9f9;
+    border-bottom: 1px solid #f0f0f0;
+
+    .p-dialog-title {
+      font-weight: 600;
+      font-size: 1.2rem;
+      color: #333;
+    }
+  }
+
+  :deep(.p-dialog-content) {
+    padding: 0;
+  }
+
+  :deep(.p-dialog-footer) {
+    padding: 1rem 1.5rem;
+    background-color: #f9f9f9;
+    border-top: 1px solid #f0f0f0;
+
+    .dialog-footer {
+      display: flex;
+      justify-content: flex-end;
+      gap: 1rem;
+    }
+  }
+
+  &.rejection-dialog {
+    :deep(.p-dialog-header) {
+      background-color: #FFEBEE;
+
+      .p-dialog-title {
+        color: #D32F2F;
+      }
+    }
+  }
+}
+
+.owner-details-container {
+  .status-header {
+    display: flex;
+    align-items: center;
+    padding: 1rem 1.5rem;
+    font-weight: 500;
+    font-size: 1rem;
+
+    i {
+      margin-right: 0.5rem;
+      font-size: 1.2rem;
+    }
+
+    &.status-pending {
+      background-color: #FFF8E1;
+      color: #FFA000;
+    }
+
+    &.status-approved {
+      background-color: #E8F5E9;
+      color: #388E3C;
+    }
+
+    &.status-rejected {
+      background-color: #FFEBEE;
+      color: #D32F2F;
+    }
+
+    &.status-warning {
+      background-color: #FFF3E0;
+      color: #E64A19;
+    }
+  }
 }
 
 .owner-details {
-  margin-bottom: 1.5rem;
+  padding: 1.5rem;
+
+  .section-title {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #333;
+    margin-top: 0;
+    margin-bottom: 1rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid #f0f0f0;
+  }
+
+  .detail-section {
+    margin-bottom: 1.5rem;
+  }
 
   .detail-row {
     display: flex;
@@ -465,11 +881,36 @@ onMounted(() => {
 
     .detail-label {
       font-weight: 600;
-      width: 120px;
+      width: 140px;
+      color: #666;
     }
 
     .detail-value {
       flex: 1;
+      color: #333;
+    }
+  }
+
+  .rejection-warning {
+    display: flex;
+    align-items: flex-start;
+    padding: 1rem;
+    background-color: #FFF3E0;
+    border-radius: 8px;
+    margin-bottom: 1.5rem;
+
+    i {
+      color: #E64A19;
+      font-size: 1.2rem;
+      margin-right: 0.75rem;
+      margin-top: 0.1rem;
+    }
+
+    span {
+      flex: 1;
+      font-size: 0.9rem;
+      line-height: 1.5;
+      color: #333;
     }
   }
 
@@ -480,6 +921,66 @@ onMounted(() => {
       display: block;
       font-weight: 600;
       margin-bottom: 0.5rem;
+      color: #333;
+
+      .required {
+        color: #F44336;
+        margin-left: 0.25rem;
+      }
+    }
+
+    :deep(.p-inputtextarea) {
+      width: 100%;
+      border-radius: 8px;
+      padding: 0.75rem;
+      font-size: 1rem;
+      border: 1px solid #e0e0e0;
+      transition: all 0.3s ease;
+
+      &:focus {
+        border-color: #2196F3;
+        box-shadow: 0 0 0 2px rgba(33, 150, 243, 0.2);
+      }
+
+      &:disabled {
+        background-color: #f9f9f9;
+        color: #666;
+      }
+    }
+
+    .rejection-note-hint {
+      display: block;
+      margin-top: 0.5rem;
+      font-size: 0.85rem;
+      color: #666;
+      line-height: 1.5;
+    }
+  }
+}
+
+.success-dialog {
+  :deep(.p-dialog-header) {
+    background-color: #E8F5E9;
+
+    .p-dialog-title {
+      color: #388E3C;
+    }
+  }
+
+  .success-content {
+    padding: 2rem;
+    text-align: center;
+
+    i {
+      font-size: 3rem;
+      color: #4CAF50;
+      margin-bottom: 1rem;
+    }
+
+    p {
+      font-size: 1.1rem;
+      color: #333;
+      margin: 0;
     }
   }
 }

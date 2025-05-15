@@ -174,6 +174,36 @@ const toggleUserStatus = async (userId: number, currentStatus: boolean) => {
 const createUser = async () => {
   try {
     loading.value = true;
+    console.log('Creating new user with data:', newUser);
+
+    // Validate required fields
+    if (!newUser.name || !newUser.email || !newUser.password) {
+      toast.error('Vui lòng điền đầy đủ thông tin bắt buộc');
+      loading.value = false;
+      return;
+    }
+
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(newUser.email)) {
+      toast.error('Email không hợp lệ');
+      loading.value = false;
+      return;
+    }
+
+    // Validate password length
+    if (newUser.password.length < 6) {
+      toast.error('Mật khẩu phải có ít nhất 6 ký tự');
+      loading.value = false;
+      return;
+    }
+
+    // Validate court owner fields if role is court_owner
+    if (newUser.role === 'court_owner' && (!newUser.id_card || !newUser.tax_code)) {
+      toast.error('Vui lòng điền đầy đủ thông tin CCCD và mã số thuế cho chủ sân');
+      loading.value = false;
+      return;
+    }
 
     // Lấy admin token từ localStorage
     const adminToken = localStorage.getItem('admin_token');
@@ -197,7 +227,9 @@ const createUser = async () => {
       delete userData.tax_code;
     }
 
+    console.log('Sending create request with data:', userData);
     const response = await axios.post('/api/admin/users', userData, { headers });
+    console.log('Create response:', response.data);
 
     // Add new user to the list
     users.value.unshift(response.data.user);
@@ -217,11 +249,16 @@ const createUser = async () => {
     toast.success('Người dùng đã được tạo thành công');
   } catch (err: any) {
     console.error('Error creating user:', err);
-    if (err.response && err.response.status === 401) {
-      localStorage.removeItem('admin_token');
-      localStorage.removeItem('admin');
-      window.location.href = '/admin/login';
-      return;
+    if (err.response) {
+      console.error('Response status:', err.response.status);
+      console.error('Response data:', err.response.data);
+
+      if (err.response.status === 401) {
+        localStorage.removeItem('admin_token');
+        localStorage.removeItem('admin');
+        window.location.href = '/admin/login';
+        return;
+      }
     }
     toast.error(err.response?.data?.message || 'Không thể tạo người dùng');
   } finally {
@@ -249,6 +286,30 @@ const editUser = (user: any) => {
 const updateUser = async () => {
   try {
     loading.value = true;
+    console.log('Updating user with ID:', editingUser.id);
+    console.log('User data to update:', editingUser);
+
+    // Validate required fields
+    if (!editingUser.name || !editingUser.email) {
+      toast.error('Vui lòng điền đầy đủ thông tin bắt buộc');
+      loading.value = false;
+      return;
+    }
+
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(editingUser.email)) {
+      toast.error('Email không hợp lệ');
+      loading.value = false;
+      return;
+    }
+
+    // Validate court owner fields if role is court_owner
+    if (editingUser.role === 'court_owner' && (!editingUser.id_card || !editingUser.tax_code)) {
+      toast.error('Vui lòng điền đầy đủ thông tin CCCD và mã số thuế cho chủ sân');
+      loading.value = false;
+      return;
+    }
 
     // Lấy admin token từ localStorage
     const adminToken = localStorage.getItem('admin_token');
@@ -277,7 +338,9 @@ const updateUser = async () => {
       userData.tax_code = editingUser.tax_code;
     }
 
+    console.log('Sending update request with data:', userData);
     const response = await axios.put(`/api/admin/users/${editingUser.id}`, userData, { headers });
+    console.log('Update response:', response.data);
 
     // Update user in the list
     const userIndex = users.value.findIndex((u: any) => u.id === editingUser.id);
@@ -289,11 +352,16 @@ const updateUser = async () => {
     toast.success('Thông tin người dùng đã được cập nhật');
   } catch (err: any) {
     console.error('Error updating user:', err);
-    if (err.response && err.response.status === 401) {
-      localStorage.removeItem('admin_token');
-      localStorage.removeItem('admin');
-      window.location.href = '/admin/login';
-      return;
+    if (err.response) {
+      console.error('Response status:', err.response.status);
+      console.error('Response data:', err.response.data);
+
+      if (err.response.status === 401) {
+        localStorage.removeItem('admin_token');
+        localStorage.removeItem('admin');
+        window.location.href = '/admin/login';
+        return;
+      }
     }
     toast.error(err.response?.data?.message || 'Không thể cập nhật thông tin người dùng');
   } finally {
@@ -313,6 +381,7 @@ const deleteUser = async () => {
 
   try {
     loading.value = true;
+    console.log('Deleting user with ID:', userToDelete.value.id);
 
     // Lấy admin token từ localStorage
     const adminToken = localStorage.getItem('admin_token');
@@ -328,7 +397,9 @@ const deleteUser = async () => {
       'Authorization': `Bearer ${adminToken}`
     };
 
-    await axios.delete(`/api/admin/users/${userToDelete.value.id}`, { headers });
+    console.log('Sending delete request for user ID:', userToDelete.value.id);
+    const response = await axios.delete(`/api/admin/users/${userToDelete.value.id}`, { headers });
+    console.log('Delete response:', response.data);
 
     // Remove user from the list
     users.value = users.value.filter((u: any) => u.id !== userToDelete.value.id);
@@ -337,11 +408,16 @@ const deleteUser = async () => {
     toast.success('Người dùng đã được xóa thành công');
   } catch (err: any) {
     console.error('Error deleting user:', err);
-    if (err.response && err.response.status === 401) {
-      localStorage.removeItem('admin_token');
-      localStorage.removeItem('admin');
-      window.location.href = '/admin/login';
-      return;
+    if (err.response) {
+      console.error('Response status:', err.response.status);
+      console.error('Response data:', err.response.data);
+
+      if (err.response.status === 401) {
+        localStorage.removeItem('admin_token');
+        localStorage.removeItem('admin');
+        window.location.href = '/admin/login';
+        return;
+      }
     }
     toast.error(err.response?.data?.message || 'Không thể xóa người dùng');
   } finally {
@@ -519,7 +595,8 @@ onMounted(() => {
 
             <div class="form-group">
               <label for="password">Mật khẩu <span class="required">*</span></label>
-              <input id="password" v-model="newUser.password" type="password" required />
+              <input id="password" v-model="newUser.password" type="password" required minlength="6" />
+              <small class="form-hint">Mật khẩu phải có ít nhất 6 ký tự</small>
             </div>
 
             <div class="form-group">
@@ -549,8 +626,8 @@ onMounted(() => {
               <button type="button" class="cancel-btn" @click="showAddUserModal = false">
                 Hủy bỏ
               </button>
-              <button type="submit" class="submit-btn">
-                Lưu
+              <button type="submit" class="submit-btn" :disabled="loading">
+                {{ loading ? 'Đang lưu...' : 'Lưu' }}
               </button>
             </div>
           </form>
@@ -605,8 +682,8 @@ onMounted(() => {
               <button type="button" class="cancel-btn" @click="showEditUserModal = false">
                 Hủy bỏ
               </button>
-              <button type="submit" class="submit-btn">
-                Lưu
+              <button type="submit" class="submit-btn" :disabled="loading">
+                {{ loading ? 'Đang lưu...' : 'Lưu' }}
               </button>
             </div>
           </form>
@@ -633,8 +710,8 @@ onMounted(() => {
             <button type="button" class="cancel-btn" @click="showDeleteConfirmModal = false">
               Hủy bỏ
             </button>
-            <button type="button" class="delete-btn" @click="deleteUser">
-              Xóa
+            <button type="button" class="delete-btn" @click="deleteUser" :disabled="loading">
+              {{ loading ? 'Đang xóa...' : 'Xóa' }}
             </button>
           </div>
         </div>
@@ -1001,6 +1078,13 @@ onMounted(() => {
         border-color: #0A2342;
         box-shadow: 0 0 0 3px rgba(10, 35, 66, 0.1);
       }
+    }
+
+    .form-hint {
+      display: block;
+      margin-top: 0.3rem;
+      font-size: 0.8rem;
+      color: #666;
     }
   }
 

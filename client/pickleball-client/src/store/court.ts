@@ -78,11 +78,19 @@ export const useCourtStore = defineStore('court', () => {
     loading.value = true;
     error.value = null;
 
+    // Reset search parameters
+    searchParams.value = {};
+
+    console.log('Fetching all available courts');
+
     try {
       const response = await courtService.getAvailableCourts();
+      console.log('Available courts response:', response);
+
       courts.value = response.courts;
       return response.courts;
     } catch (err: any) {
+      console.error('Error in fetchAvailableCourts:', err);
       error.value = typeof err === 'string' ? err : 'Failed to fetch available courts';
       throw error.value;
     } finally {
@@ -94,13 +102,27 @@ export const useCourtStore = defineStore('court', () => {
   async function searchCourts(params: CourtSearchParams) {
     loading.value = true;
     error.value = null;
-    searchParams.value = params;
+
+    // Update search parameters
+    searchParams.value = { ...params };
+
+    console.log('Searching courts with params:', searchParams.value);
 
     try {
-      const response = await courtService.searchCourts(params);
+      // Clean up undefined and empty string values
+      const cleanParams = Object.fromEntries(
+        Object.entries(params).filter(([_, value]) => value !== undefined && value !== '')
+      );
+
+      console.log('Clean search params:', cleanParams);
+
+      const response = await courtService.searchCourts(cleanParams);
+      console.log('Search response:', response);
+
       courts.value = response.courts;
       return response.courts;
     } catch (err: any) {
+      console.error('Error in searchCourts:', err);
       error.value = typeof err === 'string' ? err : 'Failed to search courts';
       throw error.value;
     } finally {

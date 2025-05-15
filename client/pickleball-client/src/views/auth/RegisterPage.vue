@@ -210,17 +210,32 @@ const onSubmit = handleSubmit(async (values) => {
       }
     } catch (registerError) {
       console.error('Error during register API call:', registerError);
+      // Format user-friendly error message
       if (typeof registerError === 'string') {
         registrationError.value = registerError;
-      } else if (registerError.response && registerError.response.data && registerError.response.data.message) {
-        registrationError.value = registerError.response.data.message;
+      } else if (registerError.response?.data?.message) {
+        // Handle specific API error messages
+        const errorMessage = registerError.response.data.message;
+        if (errorMessage.includes('email already exists')) {
+          registrationError.value = t('auth.emailAlreadyExists') || 'This email is already registered. Please use a different email or try logging in.';
+        } else if (errorMessage.includes('phone already exists')) {
+          registrationError.value = t('auth.phoneAlreadyExists') || 'This phone number is already registered. Please use a different phone number.';
+        } else {
+          registrationError.value = errorMessage;
+        }
       } else {
         registrationError.value = t('auth.registrationFailed');
       }
     }
   } catch (error) {
     console.error('Registration error in onSubmit:', error);
-    registrationError.value = typeof error === 'string' ? error : t('auth.registrationFailed');
+    // Provide a user-friendly error message
+    if (typeof error === 'string') {
+      // Clean up any technical details from the error message
+      registrationError.value = error.replace(/Error: |ValidationError: |SequelizeValidationError: /g, '');
+    } else {
+      registrationError.value = t('auth.registrationFailed');
+    }
   } finally {
     // Always reset submitting state
     setTimeout(() => {
@@ -345,17 +360,34 @@ const directRegister = async () => {
       }
     } catch (apiError) {
       console.error('Direct API error:', apiError);
+      // Format user-friendly error message
       if (apiError.response?.data?.message) {
-        registrationError.value = apiError.response.data.message;
+        // Handle specific API error messages
+        const errorMessage = apiError.response.data.message;
+        if (errorMessage.includes('email already exists')) {
+          registrationError.value = t('auth.emailAlreadyExists') || 'This email is already registered. Please use a different email or try logging in.';
+        } else if (errorMessage.includes('phone already exists')) {
+          registrationError.value = t('auth.phoneAlreadyExists') || 'This phone number is already registered. Please use a different phone number.';
+        } else {
+          // Clean up any technical details from the error message
+          registrationError.value = errorMessage.replace(/Error: |ValidationError: |SequelizeValidationError: /g, '');
+        }
       } else if (apiError.message) {
-        registrationError.value = apiError.message;
+        // Clean up any technical details from the error message
+        registrationError.value = apiError.message.replace(/Error: |ValidationError: |SequelizeValidationError: /g, '');
       } else {
         registrationError.value = t('auth.registrationFailed');
       }
     }
   } catch (error) {
     console.error('Direct registration error:', error);
-    registrationError.value = typeof error === 'string' ? error : t('auth.registrationFailed');
+    // Provide a user-friendly error message
+    if (typeof error === 'string') {
+      // Clean up any technical details from the error message
+      registrationError.value = error.replace(/Error: |ValidationError: |SequelizeValidationError: /g, '');
+    } else {
+      registrationError.value = t('auth.registrationFailed');
+    }
   } finally {
     // Always reset submitting state
     setTimeout(() => {
@@ -385,7 +417,12 @@ const goToLogin = () => {
         </div>
 
         <div v-if="registrationError" class="auth-error">
-          <BaseAlert type="error" :message="registrationError" />
+          <BaseAlert
+            type="error"
+            :title="t('common.error')"
+            :message="registrationError"
+            bordered
+          />
         </div>
 
         <div class="role-selector">
@@ -412,12 +449,6 @@ const goToLogin = () => {
         </div>
 
         <form class="auth-form" ref="registerForm" @submit.prevent="onSubmit">
-          <!-- Debug info -->
-          <div v-if="registrationError" class="debug-info" style="margin-bottom: 1rem; padding: 0.5rem; background-color: #f8f9fa; border-radius: 4px;">
-            <p style="font-size: 0.8rem; color: #6c757d; margin-bottom: 0.25rem;">Debug Info:</p>
-            <p style="font-size: 0.8rem; margin: 0;">Form Reference: {{ registerForm ? 'OK' : 'NULL' }}</p>
-          </div>
-
           <div class="form-group">
             <BaseInput
               v-model="nameInput"
@@ -551,17 +582,7 @@ const goToLogin = () => {
               {{ authStore.loading || isSubmitting ? t('common.loading') : t('auth.registerButton') }}
             </button>
 
-            <!-- Nút dự phòng với form submit -->
-            <button
-              v-if="registrationError"
-              type="button"
-              class="register-button register-button--alt"
-              style="margin-top: 0.5rem; background-color: #6c757d;"
-              :disabled="authStore.loading || isSubmitting"
-              @click="submitForm"
-            >
-              {{ t('auth.tryAlternativeRegister') || 'Thử cách khác' }}
-            </button>
+
           </div>
         </form>
 
@@ -653,6 +674,8 @@ const goToLogin = () => {
 
 .auth-error {
   margin-bottom: 1.5rem;
+  border-radius: 8px;
+  overflow: hidden;
 }
 
 .court-owner-notice {

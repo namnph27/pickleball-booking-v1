@@ -56,6 +56,26 @@ const createTimeslot = async (req, res) => {
       return res.status(400).json({ message: 'Specific date must be in YYYY-MM-DD format' });
     }
 
+    // Check if the timeslot is within the 2-day restriction window when creating with a non-zero price
+    if (Number(price) > 0 && specific_date) {
+      const currentDate = new Date();
+      currentDate.setHours(0, 0, 0, 0); // Reset time to start of day
+
+      const timeslotDate = new Date(specific_date);
+      timeslotDate.setHours(0, 0, 0, 0); // Reset time to start of day
+
+      // Calculate the difference in days
+      const timeDifference = timeslotDate.getTime() - currentDate.getTime();
+      const daysDifference = Math.floor(timeDifference / (1000 * 3600 * 24));
+
+      // If the timeslot is less than 2 days in the future, don't allow price changes
+      if (daysDifference < 2) {
+        return res.status(400).json({
+          message: 'Price changes are not allowed for timeslots less than 2 days from now'
+        });
+      }
+    }
+
     // Create timeslot
     const newTimeslot = await CourtTimeslot.create({
       court_id: courtId,
@@ -110,6 +130,26 @@ const updateTimeslot = async (req, res) => {
     // Validate specific_date format if provided
     if (specific_date && !/^\d{4}-\d{2}-\d{2}$/.test(specific_date)) {
       return res.status(400).json({ message: 'Specific date must be in YYYY-MM-DD format' });
+    }
+
+    // Check if the timeslot is within the 2-day restriction window
+    if (price !== undefined && timeslot.price !== Number(price) && specific_date) {
+      const currentDate = new Date();
+      currentDate.setHours(0, 0, 0, 0); // Reset time to start of day
+
+      const timeslotDate = new Date(specific_date);
+      timeslotDate.setHours(0, 0, 0, 0); // Reset time to start of day
+
+      // Calculate the difference in days
+      const timeDifference = timeslotDate.getTime() - currentDate.getTime();
+      const daysDifference = Math.floor(timeDifference / (1000 * 3600 * 24));
+
+      // If the timeslot is less than 2 days in the future, don't allow price changes
+      if (daysDifference < 2) {
+        return res.status(400).json({
+          message: 'Price changes are not allowed for timeslots less than 2 days from now'
+        });
+      }
     }
 
     // Update timeslot
@@ -250,6 +290,30 @@ const copyDayOfWeekTimeslotsToDate = async (req, res) => {
     // Validate specific_date format
     if (!/^\d{4}-\d{2}-\d{2}$/.test(specific_date)) {
       return res.status(400).json({ message: 'Specific date must be in YYYY-MM-DD format' });
+    }
+
+    // Check if the specific date is within the 2-day restriction window
+    const currentDate = new Date();
+    currentDate.setHours(0, 0, 0, 0); // Reset time to start of day
+
+    const timeslotDate = new Date(specific_date);
+    timeslotDate.setHours(0, 0, 0, 0); // Reset time to start of day
+
+    // Calculate the difference in days
+    const timeDifference = timeslotDate.getTime() - currentDate.getTime();
+    const daysDifference = Math.floor(timeDifference / (1000 * 3600 * 24));
+
+    // If the date is less than 2 days in the future, don't allow copying timeslots with prices
+    if (daysDifference < 2) {
+      // Get the day of week timeslots to check if they have prices
+      const dayOfWeekTimeslots = await CourtTimeslot.getByCourtIdAndDay(courtId, day_of_week);
+      const hasNonZeroPrices = dayOfWeekTimeslots.some(ts => ts.price > 0);
+
+      if (hasNonZeroPrices) {
+        return res.status(400).json({
+          message: 'Cannot copy timeslots with prices to dates less than 2 days from now'
+        });
+      }
     }
 
     // Check if there are already timeslots for this specific date

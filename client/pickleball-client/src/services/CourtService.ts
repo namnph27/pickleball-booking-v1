@@ -131,15 +131,18 @@ export function useCourtService() {
       }
     }
 
-    return post<{ timeslot: CourtTimeslot }>(`/api/courts/${courtId}/timeslots`, timeslotData);
+    // Pass showToast: false to prevent automatic display of server messages
+    return post<{ timeslot: CourtTimeslot }>(`/api/courts/${courtId}/timeslots`, timeslotData, false);
   };
 
   const updateTimeslot = (courtId: number, timeslotId: number, timeslotData: Partial<CourtTimeslot>) => {
-    return put<{ timeslot: CourtTimeslot }>(`/api/courts/timeslots/${timeslotId}`, timeslotData);
+    // Pass showToast: false to prevent automatic display of server messages
+    return put<{ timeslot: CourtTimeslot }>(`/api/courts/timeslots/${timeslotId}`, timeslotData, false);
   };
 
   const deleteTimeslot = (courtId: number, timeslotId: number) => {
-    return del<{ message: string }>(`/api/courts/timeslots/${timeslotId}`);
+    // Pass showToast: false to prevent automatic display of server messages
+    return del<{ message: string }>(`/api/courts/timeslots/${timeslotId}`, undefined, false);
   };
 
   const getTimeslotsByDate = (courtId: number, date: string) => {
@@ -169,16 +172,18 @@ export function useCourtService() {
   };
 
   const copyDayOfWeekTimeslotsToDate = (courtId: number, dayOfWeek: number, specificDate: string) => {
+    // Pass showToast: false to prevent automatic display of server messages
     return post<{ timeslots: CourtTimeslot[], message: string }>(`/api/courts/${courtId}/timeslots/copy-day`, {
       day_of_week: dayOfWeek,
       specific_date: specificDate
-    });
+    }, false);
   };
 
   const deleteTimeslotsByDate = (courtId: number, specificDate: string) => {
+    // Pass showToast: false to prevent automatic display of server messages
     return del<{ message: string }>(`/api/courts/${courtId}/timeslots/by-date`, {
       specific_date: specificDate
-    });
+    }, false);
   };
 
   return {

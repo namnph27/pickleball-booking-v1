@@ -5,41 +5,117 @@ const crypto = require('crypto');
 const User = {
   // Create a new user
   async create(userData) {
-    const { name, email, password, phone, role = 'customer', id_card, tax_code } = userData;
+    const { name, email, password, phone, role = 'customer', id_card, tax_code, approval_status } = userData;
 
-    console.log('Creating user with data:', { name, email, phone, role, id_card, tax_code });
+    console.log('Creating user with data:', { name, email, phone, role, id_card, tax_code, approval_status });
 
-    // Hash password
-    const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(password, salt);
-
-    let query, values;
-
-    if (role === 'court_owner' && id_card && tax_code) {
-      // Chủ sân cần phê duyệt, mặc định là 'pending'
-      query = `
-        INSERT INTO users (name, email, password, phone, role, id_card, tax_code, approval_status, created_at, updated_at)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending', NOW(), NOW())
-        RETURNING id, name, email, phone, role, id_card, tax_code, approval_status, created_at
-      `;
-      values = [name, email, hashedPassword, phone, role, id_card, tax_code];
-    } else {
-      // Người chơi không cần phê duyệt
-      query = `
-        INSERT INTO users (name, email, password, phone, role, created_at, updated_at)
-        VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
-        RETURNING id, name, email, phone, role, created_at
-      `;
-      values = [name, email, hashedPassword, phone, role];
+    // Validate required fields
+    if (!name || !email || !password) {
+      console.error('Missing required fields for user creation');
+      throw new Error('Name, email, and password are required');
     }
 
     try {
-      console.log('Executing SQL query to create user');
+      // First, check the structure of the users table to determine available columns
+      const tableInfoQuery = `
+        SELECT column_name
+        FROM information_schema.columns
+        WHERE table_name = 'users'
+      `;
+
+      console.log('Checking users table structure with query:', tableInfoQuery);
+      const tableInfoResult = await db.query(tableInfoQuery);
+      const availableColumns = tableInfoResult.rows.map(row => row.column_name);
+
+      console.log('Available columns in users table:', availableColumns);
+
+      // Hash password
+      const salt = await bcrypt.genSalt(10);
+      const hashedPassword = await bcrypt.hash(password, salt);
+
+      // Build dynamic query based on available columns
+      let columns = ['name', 'email', 'password', 'role', 'created_at', 'updated_at'];
+      let placeholders = ['$1', '$2', '$3', '$4', 'NOW()', 'NOW()'];
+      let values = [name, email, hashedPassword, role];
+      let returningColumns = ['id', 'name', 'email', 'role', 'created_at'];
+      let paramIndex = 5;
+
+      // Add phone if provided
+      if (phone) {
+        columns.push('phone');
+        placeholders.push(`$${paramIndex}`);
+        values.push(phone);
+        returningColumns.push('phone');
+        paramIndex++;
+      }
+
+      // Add is_active if the column exists
+      if (availableColumns.includes('is_active')) {
+        columns.push('is_active');
+        placeholders.push('TRUE');
+        returningColumns.push('is_active');
+      }
+
+      // Add court owner specific fields if applicable
+      if (role === 'court_owner' && id_card && tax_code) {
+        // Add id_card if the column exists
+        if (availableColumns.includes('id_card')) {
+          columns.push('id_card');
+          placeholders.push(`$${paramIndex}`);
+          values.push(id_card);
+          returningColumns.push('id_card');
+          paramIndex++;
+        }
+
+        // Add tax_code if the column exists
+        if (availableColumns.includes('tax_code')) {
+          columns.push('tax_code');
+          placeholders.push(`$${paramIndex}`);
+          values.push(tax_code);
+          returningColumns.push('tax_code');
+          paramIndex++;
+        }
+
+        // Add approval_status if the column exists
+        if (availableColumns.includes('approval_status')) {
+          const approvalStatusValue = approval_status || 'pending';
+          columns.push('approval_status');
+          placeholders.push(`$${paramIndex}`);
+          values.push(approvalStatusValue);
+          returningColumns.push('approval_status');
+          paramIndex++;
+        }
+      }
+
+      // Build the final query
+      const query = `
+        INSERT INTO users (${columns.join(', ')})
+        VALUES (${placeholders.join(', ')})
+        RETURNING ${returningColumns.join(', ')}
+      `;
+
+      console.log('Executing dynamic SQL query to create user:', query);
+      console.log('With values:', values.map((v, i) => i === 2 ? '[HASHED_PASSWORD]' : v)); // Don't log the hashed password
+
       const result = await db.query(query, values);
       console.log('User created successfully:', result.rows[0]);
       return result.rows[0];
     } catch (error) {
       console.error('Error creating user:', error);
+      console.error('Error stack:', error.stack);
+
+      // Check for specific database errors
+      if (error.code === '23505') { // Unique violation
+        console.error('Duplicate key violation - email already exists');
+        throw new Error('Email already in use');
+      } else if (error.code === '42P01') { // Undefined table
+        console.error('Table "users" does not exist');
+        throw new Error('Database schema issue: users table does not exist');
+      } else if (error.code === '42703') { // Undefined column
+        console.error('Column does not exist in users table');
+        throw new Error('Database schema issue: column does not exist in users table');
+      }
+
       throw error;
     }
   },
@@ -58,12 +134,24 @@ const User = {
 
   // Find user by ID
   async findById(id) {
+    console.log('User.findById: Finding user with ID:', id);
     const query = 'SELECT * FROM users WHERE id = $1';
+    console.log('User.findById: Executing query:', query);
 
     try {
       const result = await db.query(query, [id]);
+      console.log(`User.findById: Query result rows: ${result.rows.length}`);
+
+      if (result.rows.length === 0) {
+        console.log('User.findById: No user found with ID:', id);
+        return null;
+      }
+
+      console.log('User.findById: User found:', result.rows[0].id, result.rows[0].email, result.rows[0].role);
       return result.rows[0];
     } catch (error) {
+      console.error('User.findById: Error finding user:', error);
+      console.error('User.findById: Error stack:', error.stack);
       throw error;
     }
   },
@@ -149,60 +237,92 @@ const User = {
   async delete(id) {
     // Sử dụng transaction để đảm bảo tính nhất quán
     const client = await db.pool.connect();
+    console.log(`Starting transaction to delete user with ID: ${id}`);
 
     try {
       await client.query('BEGIN');
 
       // Kiểm tra xem người dùng có tồn tại không
       const checkUserQuery = 'SELECT role FROM users WHERE id = $1';
+      console.log('Checking if user exists with query:', checkUserQuery);
       const userResult = await client.query(checkUserQuery, [id]);
 
       if (userResult.rows.length === 0) {
+        console.log(`User with ID ${id} not found, rolling back transaction`);
         await client.query('ROLLBACK');
         return null;
       }
 
       const userRole = userResult.rows[0].role;
+      console.log(`User with ID ${id} has role: ${userRole}`);
 
       // Nếu là chủ sân, xóa các bản ghi liên quan trước
       if (userRole === 'court_owner') {
         console.log(`Deleting court owner (ID: ${id}) with cascading delete...`);
 
-        // Xóa các bản ghi trong booking_players liên quan đến các booking của sân thuộc chủ sân
-        const deleteBookingPlayersQuery = `
-          DELETE FROM booking_players
-          WHERE booking_id IN (
-            SELECT b.id FROM bookings b
-            JOIN courts c ON b.court_id = c.id
-            WHERE c.owner_id = $1
-          )
-        `;
-        await client.query(deleteBookingPlayersQuery, [id]);
+        try {
+          // Xóa các bản ghi trong booking_players liên quan đến các booking của sân thuộc chủ sân
+          const deleteBookingPlayersQuery = `
+            DELETE FROM booking_players
+            WHERE booking_id IN (
+              SELECT b.id FROM bookings b
+              JOIN courts c ON b.court_id = c.id
+              WHERE c.owner_id = $1
+            )
+          `;
+          console.log('Deleting related booking_players with query:', deleteBookingPlayersQuery);
+          await client.query(deleteBookingPlayersQuery, [id]);
+          console.log('Successfully deleted related booking_players');
 
-        // Xóa các bản ghi trong booking_join_requests liên quan đến các booking của sân thuộc chủ sân
-        const deleteJoinRequestsQuery = `
-          DELETE FROM booking_join_requests
-          WHERE booking_id IN (
-            SELECT b.id FROM bookings b
-            JOIN courts c ON b.court_id = c.id
-            WHERE c.owner_id = $1
-          )
-        `;
-        await client.query(deleteJoinRequestsQuery, [id]);
+          // Xóa các bản ghi trong booking_join_requests liên quan đến các booking của sân thuộc chủ sân
+          const deleteJoinRequestsQuery = `
+            DELETE FROM booking_join_requests
+            WHERE booking_id IN (
+              SELECT b.id FROM bookings b
+              JOIN courts c ON b.court_id = c.id
+              WHERE c.owner_id = $1
+            )
+          `;
+          console.log('Deleting related booking_join_requests with query:', deleteJoinRequestsQuery);
+          await client.query(deleteJoinRequestsQuery, [id]);
+          console.log('Successfully deleted related booking_join_requests');
+        } catch (err) {
+          console.error('Error during cascading delete operations:', err);
+          console.error('Error stack:', err.stack);
+          throw err; // Re-throw to be caught by the outer catch block
+        }
       }
 
       // Xóa người dùng (các bảng khác sẽ được xóa theo CASCADE)
       const deleteUserQuery = 'DELETE FROM users WHERE id = $1 RETURNING *';
+      console.log('Deleting user with query:', deleteUserQuery);
       const result = await client.query(deleteUserQuery, [id]);
+      console.log(`User with ID ${id} deleted successfully`);
 
       await client.query('COMMIT');
+      console.log('Transaction committed successfully');
       return result.rows[0];
     } catch (error) {
-      await client.query('ROLLBACK');
       console.error('Error deleting user:', error);
+      console.error('Error stack:', error.stack);
+
+      try {
+        console.log('Rolling back transaction due to error');
+        await client.query('ROLLBACK');
+        console.log('Transaction rolled back successfully');
+      } catch (rollbackError) {
+        console.error('Error during rollback:', rollbackError);
+      }
+
       throw error;
     } finally {
-      client.release();
+      try {
+        console.log('Releasing database client');
+        client.release();
+        console.log('Database client released successfully');
+      } catch (releaseError) {
+        console.error('Error releasing client:', releaseError);
+      }
     }
   },
 

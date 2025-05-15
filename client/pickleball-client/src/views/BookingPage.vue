@@ -236,13 +236,16 @@ const processPayment = async () => {
     };
 
     // Simplified payment flow - assume payment is successful
-    await bookingStore.processPayment(paymentData);
+    const payment = await bookingStore.processPayment(paymentData);
 
     toast.success(t('booking.paymentSuccessful'));
 
-    // Close modal and redirect to booking details
+    // Close modal and redirect to payment success page
     showPaymentModal.value = false;
-    router.push(`/bookings/${bookingStore.currentBooking.id}`);
+    router.push({
+      path: '/payment/success',
+      query: { payment_id: payment.id, booking_id: bookingStore.currentBooking.id }
+    });
   } catch (error) {
     toast.error(typeof error === 'string' ? error : t('booking.paymentFailed'));
   } finally {
@@ -255,9 +258,9 @@ const cancelBooking = async () => {
   if (!bookingStore.currentBooking) return;
 
   try {
-    await bookingStore.cancelBooking(bookingStore.currentBooking.id);
+    // Just close the payment modal without canceling the booking in the database
+    // This allows the user to stay on the current page with all their booking information intact
     showPaymentModal.value = false;
-    router.push('/courts');
   } catch (error) {
     toast.error(typeof error === 'string' ? error : t('booking.cancelError'));
   }

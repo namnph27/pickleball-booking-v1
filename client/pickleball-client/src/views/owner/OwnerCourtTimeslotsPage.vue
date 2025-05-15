@@ -13,6 +13,7 @@ import BaseAlert from '../../components/base/BaseAlert.vue';
 import BaseModal from '../../components/base/BaseModal.vue';
 import BaseInput from '../../components/base/BaseInput.vue';
 import BaseSelect from '../../components/base/BaseSelect.vue';
+import BaseTooltip from '../../components/base/BaseTooltip.vue';
 
 const { t } = useI18n();
 const route = useRoute();
@@ -31,6 +32,7 @@ const showDeleteDateModal = ref(false);
 const isSubmitting = ref(false);
 const selectedTimeslot = ref<CourtTimeslot | null>(null);
 const copyFromDayOfWeek = ref(1); // Default to Monday
+const savedScrollPosition = ref(0); // To save scroll position
 
 // Check if there are specific date timeslots
 const hasSpecificDateTimeslots = computed(() => {
@@ -133,7 +135,7 @@ const selectedDayTimeslots = computed(() => {
 
 // Map fixed timeslots to actual timeslots
 const mappedTimeslots = computed(() => {
-  const result = [];
+  const result: Array<CourtTimeslot & { displayTime: string, isPlaceholder?: boolean }> = [];
 
   for (const fixedSlot of fixedTimeslots.value) {
     // Find if there's a matching timeslot for this time period
@@ -176,8 +178,24 @@ const formatPrice = (price: number) => {
   return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(price || 0);
 };
 
+// Check if a timeslot is within the 2-day restriction window
+const isTimeslotRestricted = (timeslotDate: string) => {
+  const currentDate = new Date();
+  currentDate.setHours(0, 0, 0, 0); // Reset time to start of day
+
+  const selectedTimeslotDate = new Date(timeslotDate);
+  selectedTimeslotDate.setHours(0, 0, 0, 0); // Reset time to start of day
+
+  // Calculate the difference in days
+  const timeDifference = selectedTimeslotDate.getTime() - currentDate.getTime();
+  const daysDifference = Math.floor(timeDifference / (1000 * 3600 * 24));
+
+  // Return true if the timeslot is less than 2 days in the future
+  return daysDifference < 2;
+};
+
 // Open edit modal for a specific timeslot
-const openTimeslotModal = (timeslot: any) => {
+const openTimeslotModal = (timeslot: CourtTimeslot & { isPlaceholder?: boolean }) => {
   selectedTimeslot.value = timeslot;
 
   // Populate form
@@ -211,6 +229,16 @@ const updateTimeslot = async () => {
     return;
   }
 
+  // Check if the timeslot is within the 2-day restriction window
+  if (isTimeslotRestricted(selectedDate.value)) {
+    // Only block price updates, allow availability changes
+    const originalTimeslot = selectedTimeslot.value;
+    if (originalTimeslot.price !== Number(price.value)) {
+      toast.error(t('courtOwner.timeslotPriceRestricted'));
+      return;
+    }
+  }
+
   isSubmitting.value = true;
 
   try {
@@ -232,8 +260,8 @@ const updateTimeslot = async () => {
     toast.success(t('courtOwner.timeslotUpdated'));
     showEditModal.value = false;
 
-    // Refresh timeslots
-    fetchTimeslots();
+    // Refresh timeslots while preserving scroll position
+    fetchTimeslots(true);
   } catch (error) {
     toast.error(typeof error === 'string' ? error : t('courtOwner.timeslotUpdateError'));
   } finally {
@@ -242,10 +270,10 @@ const updateTimeslot = async () => {
 };
 
 // Toggle timeslot availability
-const toggleAvailability = async (timeslot: CourtTimeslot) => {
+const toggleAvailability = async (timeslot: CourtTimeslot & { isPlaceholder?: boolean }) => {
   try {
     // If it's not a placeholder and has an ID, just update it directly
-    if (!(timeslot as any).isPlaceholder && timeslot.id) {
+    if (!timeslot.isPlaceholder && timeslot.id) {
       await courtService.updateTimeslot(courtId.value, timeslot.id, {
         is_available: !timeslot.is_available
       });
@@ -256,8 +284,8 @@ const toggleAvailability = async (timeslot: CourtTimeslot) => {
           : t('courtOwner.timeslotMarkedAvailable')
       );
 
-      // Refresh timeslots
-      fetchTimeslots();
+      // Refresh timeslots while preserving scroll position
+      fetchTimeslots(true);
       return;
     }
 
@@ -305,16 +333,22 @@ const toggleAvailability = async (timeslot: CourtTimeslot) => {
       throw error;
     }
 
-    // Refresh timeslots
-    fetchTimeslots();
+    // Refresh timeslots while preserving scroll position
+    fetchTimeslots(true);
   } catch (error) {
     toast.error(typeof error === 'string' ? error : t('courtOwner.timeslotUpdateError'));
   }
 };
 
 // Quick update price
-const quickUpdatePrice = async (timeslot: any, newPrice: number) => {
+const quickUpdatePrice = async (timeslot: CourtTimeslot & { isPlaceholder?: boolean }, newPrice: number) => {
   try {
+    // Check if the timeslot is within the 2-day restriction window
+    if (isTimeslotRestricted(selectedDate.value)) {
+      toast.error(t('courtOwner.timeslotPriceRestricted'));
+      return;
+    }
+
     // If it's not a placeholder and has an ID, just update it directly
     if (!timeslot.isPlaceholder && timeslot.id) {
       await courtService.updateTimeslot(courtId.value, timeslot.id, {
@@ -323,8 +357,8 @@ const quickUpdatePrice = async (timeslot: any, newPrice: number) => {
 
       toast.success(t('courtOwner.timeslotUpdated'));
 
-      // Refresh timeslots
-      fetchTimeslots();
+      // Refresh timeslots while preserving scroll position
+      fetchTimeslots(true);
       return;
     }
 
@@ -367,15 +401,34 @@ const quickUpdatePrice = async (timeslot: any, newPrice: number) => {
       throw error;
     }
 
-    // Refresh timeslots
-    fetchTimeslots();
+    // Refresh timeslots while preserving scroll position
+    fetchTimeslots(true);
   } catch (error) {
     toast.error(typeof error === 'string' ? error : t('courtOwner.timeslotUpdateError'));
   }
 };
 
+// Save current scroll position
+const saveScrollPosition = () => {
+  savedScrollPosition.value = window.scrollY;
+};
+
+// Restore saved scroll position
+const restoreScrollPosition = () => {
+  setTimeout(() => {
+    window.scrollTo({
+      top: savedScrollPosition.value,
+      behavior: 'auto'
+    });
+  }, 100); // Small delay to ensure DOM has updated
+};
+
 // Fetch court timeslots for the selected date
-const fetchTimeslots = async () => {
+const fetchTimeslots = async (preserveScroll = false) => {
+  if (preserveScroll) {
+    saveScrollPosition();
+  }
+
   loading.value = true;
 
   try {
@@ -386,6 +439,10 @@ const fetchTimeslots = async () => {
     toast.error(typeof error === 'string' ? error : t('courtOwner.timeslotsFetchError'));
   } finally {
     loading.value = false;
+
+    if (preserveScroll) {
+      restoreScrollPosition();
+    }
   }
 };
 
@@ -520,10 +577,22 @@ onMounted(async () => {
 
         <div class="timeslots-header">
           <h3 class="section-title">{{ t('courtOwner.timeslots') }}</h3>
-          <p class="section-subtitle">
-            {{ t('courtOwner.timeslotsDescription') }}
-          </p>
-          <BaseAlert type="info" message="Các khung giờ được hệ thống hiển thị ở trang này là mặc định và chủ sân sẽ không thể thay đổi được. Chủ sân chỉ có thể cập nhật giá sân, đóng hoặc mở các khung giờ." />
+          <div class="timeslots-info">
+            <div class="timeslots-info-icon">
+              <i class="pi pi-info-circle"></i>
+            </div>
+            <div class="timeslots-info-content">
+              <h4>Quản lý khung giờ cố định</h4>
+              <p>
+                Các khung giờ từ 6:00 đến 23:00 được hệ thống tạo sẵn và không thể thay đổi. Với mỗi khung giờ, bạn chỉ có thể:
+              </p>
+              <ul>
+                <li><i class="pi pi-money-bill"></i> <strong>Thay đổi giá</strong> - Cập nhật giá cho từng khung giờ</li>
+                <li><i class="pi pi-check-circle"></i> <strong>Đánh dấu khả dụng</strong> - Cho phép người chơi đặt sân trong khung giờ này</li>
+                <li><i class="pi pi-times-circle"></i> <strong>Đánh dấu không khả dụng</strong> - Khóa khung giờ này khi sân đang bảo trì hoặc không thể sử dụng</li>
+              </ul>
+            </div>
+          </div>
         </div>
 
         <!-- Fixed Timeslots Grid -->
@@ -531,54 +600,89 @@ onMounted(async () => {
           <BaseCard
             v-for="timeslot in mappedTimeslots"
             :key="`${timeslot.day_of_week}-${timeslot.start_time}`"
-            :class="['timeslot-card', { 'timeslot-card--placeholder': timeslot.isPlaceholder }]"
+            :class="['timeslot-card', {
+              'timeslot-card--placeholder': timeslot.isPlaceholder,
+              'timeslot-card--restricted': isTimeslotRestricted(selectedDate.value)
+            }]"
           >
+            <!-- Fixed Time Header -->
             <div class="timeslot-time">
               <i class="pi pi-clock"></i>
               <span>{{ timeslot.displayTime }}</span>
+              <div class="fixed-badge">
+                <i class="pi pi-lock"></i>
+                <span>Cố định</span>
+              </div>
             </div>
 
+            <!-- Price Section -->
             <div class="timeslot-price">
-              <i class="pi pi-money-bill"></i>
-              <span>{{ formatPrice(timeslot.price) }}</span>
+              <div class="price-header">
+                <i class="pi pi-money-bill"></i>
+                <span class="price-label">Giá:</span>
+                <span class="price-value">{{ formatPrice(timeslot.price) }}</span>
+
+                <!-- Restriction indicator -->
+                <BaseTooltip v-if="isTimeslotRestricted(selectedDate.value)" class="restriction-indicator">
+                  <template #trigger>
+                    <i class="pi pi-exclamation-triangle"></i>
+                  </template>
+                  <template #content>
+                    <div>{{ t('courtOwner.timeslotPriceRestrictedTooltip') }}</div>
+                  </template>
+                </BaseTooltip>
+              </div>
 
               <!-- Quick Price Buttons -->
               <div class="quick-price-buttons">
                 <button
-                  v-for="quickPrice in [100000, 150000, 200000]"
+                  v-for="quickPrice in [100000, 150000, 200000, 250000]"
                   :key="quickPrice"
                   class="quick-price-button"
                   @click="quickUpdatePrice(timeslot, quickPrice)"
+                  :class="{
+                    'active': timeslot.price === quickPrice,
+                    'disabled': isTimeslotRestricted(selectedDate.value)
+                  }"
+                  :disabled="isTimeslotRestricted(selectedDate.value)"
                 >
                   {{ formatPrice(quickPrice) }}
                 </button>
               </div>
             </div>
 
+            <!-- Availability Status -->
             <div class="timeslot-status">
-              <span :class="['status-badge', timeslot.is_available ? 'available' : 'unavailable']">
-                {{ timeslot.is_available ? t('courts.available') : t('courts.unavailable') }}
-              </span>
-            </div>
+              <div class="status-header">
+                <i class="pi pi-check-circle" v-if="timeslot.is_available"></i>
+                <i class="pi pi-times-circle" v-else></i>
+                <span class="status-label">Trạng thái:</span>
+                <span :class="['status-badge', timeslot.is_available ? 'available' : 'unavailable']">
+                  {{ timeslot.is_available ? t('courts.available') : t('courts.unavailable') }}
+                </span>
+              </div>
 
-            <div class="timeslot-actions">
+              <!-- Toggle Availability Button -->
               <button
-                class="action-button"
-                @click="openTimeslotModal(timeslot)"
-                title="Edit"
-              >
-                <i class="pi pi-pencil"></i>
-              </button>
-
-              <button
-                class="action-button"
+                class="toggle-availability-button"
                 @click="toggleAvailability(timeslot)"
-                :title="timeslot.is_available ? 'Mark Unavailable' : 'Mark Available'"
+                :class="{ 'available': timeslot.is_available, 'unavailable': !timeslot.is_available }"
               >
+                {{ timeslot.is_available ? 'Đánh dấu không khả dụng' : 'Đánh dấu khả dụng' }}
                 <i :class="`pi ${timeslot.is_available ? 'pi-eye-slash' : 'pi-eye'}`"></i>
               </button>
+            </div>
 
-              <!-- Delete button removed as timeslots are system-defined -->
+            <!-- Edit Button -->
+            <div class="timeslot-actions">
+              <button
+                class="edit-button"
+                @click="openTimeslotModal(timeslot)"
+                :class="{ 'edit-button--restricted': isTimeslotRestricted(selectedDate.value) }"
+              >
+                <i class="pi pi-pencil"></i>
+                <span>{{ isTimeslotRestricted(selectedDate.value) ? 'Chỉnh sửa trạng thái' : 'Chỉnh sửa giá & trạng thái' }}</span>
+              </button>
             </div>
           </BaseCard>
         </div>
@@ -598,39 +702,34 @@ onMounted(async () => {
       @ok="updateTimeslot"
     >
       <div class="timeslot-form">
-        <div class="form-group">
-          <BaseSelect
-            :modelValue="dayOfWeek"
-            @update:modelValue="dayOfWeek = $event"
-            :label="t('courtOwner.dayOfWeek')"
-            :options="dayOptions"
-            required
-          />
-        </div>
-
-        <div class="form-row">
-          <div class="form-group">
-            <BaseInput
-              :modelValue="startTime"
-              @update:modelValue="startTime = $event"
-              type="time"
-              :label="t('courtOwner.startTime')"
-              required
-            />
+        <div class="timeslot-info">
+          <div class="timeslot-info-item">
+            <span class="info-label">{{ t('courtOwner.dayOfWeek') }}:</span>
+            <span class="info-value">{{ dayOptions.find(d => d.value === dayOfWeek)?.label }}</span>
+          </div>
+          <div class="timeslot-info-item">
+            <span class="info-label">{{ t('courtOwner.time') }}:</span>
+            <span class="info-value">{{ formatTime(startTime) }} - {{ formatTime(endTime) }}</span>
           </div>
 
-          <div class="form-group">
-            <BaseInput
-              :modelValue="endTime"
-              @update:modelValue="endTime = $event"
-              type="time"
-              :label="t('courtOwner.endTime')"
-              required
-            />
-          </div>
+          <!-- Hidden inputs to maintain the values -->
+          <input type="hidden" v-model="dayOfWeek" />
+          <input type="hidden" v-model="startTime" />
+          <input type="hidden" v-model="endTime" />
         </div>
 
-        <div class="form-group">
+        <BaseAlert
+          v-if="isTimeslotRestricted(selectedDate.value)"
+          type="warning"
+          :message="t('courtOwner.timeslotPriceRestrictedAlert')"
+        />
+        <BaseAlert
+          v-else
+          type="info"
+          message="Khung giờ cố định không thể thay đổi. Bạn chỉ có thể điều chỉnh giá và trạng thái khả dụng."
+        />
+
+        <div class="form-group price-input">
           <BaseInput
             :modelValue="price"
             @update:modelValue="price = $event"
@@ -639,19 +738,41 @@ onMounted(async () => {
             :placeholder="t('courtOwner.pricePlaceholder')"
             min="0"
             step="10000"
+            :disabled="isTimeslotRestricted(selectedDate.value)"
           />
+
+          <div class="quick-price-suggestions">
+            <span class="suggestions-label">Giá đề xuất:</span>
+            <div class="quick-price-buttons">
+              <button
+                v-for="quickPrice in [100000, 150000, 200000, 250000]"
+                :key="quickPrice"
+                class="quick-price-button"
+                @click="price = quickPrice"
+                :class="{
+                  'active': price === quickPrice,
+                  'disabled': isTimeslotRestricted(selectedDate.value)
+                }"
+                :disabled="isTimeslotRestricted(selectedDate.value)"
+              >
+                {{ formatPrice(quickPrice) }}
+              </button>
+            </div>
+          </div>
         </div>
 
         <div class="form-group">
-          <div class="checkbox-group">
-            <label class="checkbox-label">
+          <div class="availability-toggle">
+            <span class="toggle-label">{{ t('courtOwner.timeslotAvailable') }}</span>
+            <label class="switch">
               <input
                 type="checkbox"
                 :checked="isAvailable"
-                @change="isAvailable = $event.target.checked"
+                @change="isAvailable = ($event.target as HTMLInputElement).checked"
               />
-              <span>{{ t('courtOwner.timeslotAvailable') }}</span>
+              <span class="slider round"></span>
             </label>
+            <span class="toggle-status">{{ isAvailable ? t('courts.available') : t('courts.unavailable') }}</span>
           </div>
         </div>
       </div>
@@ -751,9 +872,63 @@ onMounted(async () => {
   }
 
   .timeslots-header {
-    margin-bottom: 1rem;
+    margin-bottom: 1.5rem;
     border-bottom: 1px solid var(--light-gray);
-    padding-bottom: 0.5rem;
+    padding-bottom: 1rem;
+
+    .section-title {
+      margin-bottom: 1rem;
+    }
+
+    .timeslots-info {
+      display: flex;
+      background-color: #e8f5e9;
+      border-radius: 8px;
+      padding: 1rem;
+      margin-bottom: 1rem;
+
+      .timeslots-info-icon {
+        flex-shrink: 0;
+        margin-right: 1rem;
+
+        i {
+          font-size: 2rem;
+          color: #4caf50;
+        }
+      }
+
+      .timeslots-info-content {
+        h4 {
+          font-size: 1.1rem;
+          font-weight: 600;
+          margin: 0 0 0.75rem 0;
+          color: #2e7d32;
+        }
+
+        p {
+          margin: 0 0 0.75rem 0;
+          color: #333;
+        }
+
+        ul {
+          margin: 0;
+          padding-left: 1.5rem;
+
+          li {
+            margin-bottom: 0.5rem;
+
+            i {
+              color: #4caf50;
+              margin-right: 0.5rem;
+            }
+
+            strong {
+              color: #2e7d32;
+            }
+          }
+        }
+      }
+    }
   }
 
   .date-display {
@@ -815,12 +990,29 @@ onMounted(async () => {
 .timeslot-card {
   display: flex;
   flex-direction: column;
-  padding: 1rem;
+  padding: 1.25rem;
   transition: all 0.2s ease;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
 
   &--placeholder {
     background-color: rgba(0, 0, 0, 0.02);
     border: 1px dashed var(--medium-gray);
+  }
+
+  &--restricted {
+    .price-header {
+      position: relative;
+
+      .restriction-indicator {
+        margin-left: 0.5rem;
+
+        i {
+          color: #f57c00;
+          font-size: 1rem;
+        }
+      }
+    }
   }
 
   &:hover {
@@ -833,29 +1025,68 @@ onMounted(async () => {
     gap: 0.5rem;
     font-weight: 600;
     font-size: 1.1rem;
-    margin-bottom: 1rem;
-    padding-bottom: 0.5rem;
+    margin-bottom: 1.25rem;
+    padding-bottom: 0.75rem;
     border-bottom: 1px solid var(--light-gray);
+    position: relative;
 
     i {
       color: var(--primary-color);
+    }
+
+    .fixed-badge {
+      position: absolute;
+      right: 0;
+      top: 0;
+      background-color: #f1f1f1;
+      border-radius: 4px;
+      padding: 0.25rem 0.5rem;
+      font-size: 0.75rem;
+      display: flex;
+      align-items: center;
+      gap: 0.25rem;
+
+      i {
+        color: #666;
+        font-size: 0.7rem;
+      }
+
+      span {
+        font-size: 0.75rem;
+        font-weight: 500;
+        color: #666;
+      }
     }
   }
 
   .timeslot-price {
     display: flex;
     flex-direction: column;
-    gap: 0.5rem;
-    margin-bottom: 1rem;
+    gap: 0.75rem;
+    margin-bottom: 1.25rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid var(--light-gray);
 
-    i {
-      color: #4caf50;
-      margin-right: 0.5rem;
-    }
+    .price-header {
+      display: flex;
+      align-items: center;
 
-    span {
-      font-weight: 500;
-      font-size: 1.1rem;
+      i {
+        color: #4caf50;
+        margin-right: 0.5rem;
+      }
+
+      .price-label {
+        font-weight: 500;
+        margin-right: 0.5rem;
+        color: #666;
+      }
+
+      .price-value {
+        font-weight: 600;
+        font-size: 1.1rem;
+        color: #333;
+      }
     }
 
     .quick-price-buttons {
@@ -868,8 +1099,8 @@ onMounted(async () => {
         background-color: var(--light-gray);
         border: none;
         border-radius: 4px;
-        padding: 0.25rem 0.5rem;
-        font-size: 0.8rem;
+        padding: 0.35rem 0.75rem;
+        font-size: 0.85rem;
         cursor: pointer;
         transition: all 0.2s ease;
 
@@ -877,18 +1108,57 @@ onMounted(async () => {
           background-color: var(--primary-color);
           color: white;
         }
+
+        &.active {
+          background-color: var(--primary-color);
+          color: white;
+        }
+
+        &.disabled {
+          opacity: 0.6;
+          cursor: not-allowed;
+
+          &:hover {
+            background-color: var(--light-gray);
+            color: inherit;
+          }
+        }
       }
     }
   }
 
   .timeslot-status {
-    margin-bottom: 1rem;
+    margin-bottom: 1.25rem;
+
+    .status-header {
+      display: flex;
+      align-items: center;
+      margin-bottom: 0.75rem;
+
+      i {
+        margin-right: 0.5rem;
+
+        &.pi-check-circle {
+          color: #4caf50;
+        }
+
+        &.pi-times-circle {
+          color: #f44336;
+        }
+      }
+
+      .status-label {
+        font-weight: 500;
+        margin-right: 0.5rem;
+        color: #666;
+      }
+    }
 
     .status-badge {
       display: inline-block;
       padding: 0.25rem 0.75rem;
       border-radius: 4px;
-      font-size: 0.8rem;
+      font-size: 0.85rem;
       font-weight: 500;
 
       &.available {
@@ -901,36 +1171,77 @@ onMounted(async () => {
         color: #c62828;
       }
     }
+
+    .toggle-availability-button {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      padding: 0.5rem;
+      border-radius: 4px;
+      font-size: 0.9rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      border: none;
+
+      &.available {
+        background-color: rgba(244, 67, 54, 0.1);
+        color: #c62828;
+
+        &:hover {
+          background-color: rgba(244, 67, 54, 0.2);
+        }
+      }
+
+      &.unavailable {
+        background-color: rgba(76, 175, 80, 0.1);
+        color: #2e7d32;
+
+        &:hover {
+          background-color: rgba(76, 175, 80, 0.2);
+        }
+      }
+    }
   }
 
   .timeslot-actions {
     display: flex;
-    gap: 0.5rem;
     margin-top: auto;
-    justify-content: flex-end;
 
-    .action-button {
-      width: 36px;
-      height: 36px;
+    .edit-button {
+      width: 100%;
       display: flex;
       align-items: center;
       justify-content: center;
-      background: none;
-      border: 1px solid var(--medium-gray);
+      gap: 0.5rem;
+      background-color: var(--primary-color);
+      color: white;
+      border: none;
       border-radius: 4px;
-      color: var(--dark-gray);
+      padding: 0.75rem;
+      font-size: 0.95rem;
+      font-weight: 500;
       cursor: pointer;
       transition: all 0.2s ease;
 
       &:hover {
-        background-color: var(--light-gray);
-        color: var(--text-color);
+        background-color: #0056b3; /* Darker blue for better contrast */
+        color: white; /* Ensure text remains white on hover */
+        box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2); /* Add shadow for better visual feedback */
       }
 
-      &--danger:hover {
-        background-color: rgba(244, 67, 54, 0.1);
-        color: #f44336;
-        border-color: #f44336;
+      &--restricted {
+        background-color: #5c6bc0; /* Different color to indicate restricted functionality */
+
+        &:hover {
+          background-color: #3f51b5;
+        }
+      }
+
+      i {
+        font-size: 0.9rem;
       }
     }
   }
@@ -943,24 +1254,146 @@ onMounted(async () => {
     &:last-child {
       margin-bottom: 0;
     }
+
+    &.price-input {
+      margin-top: 1.5rem;
+    }
   }
 
-  .form-row {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 1rem;
-  }
+  .timeslot-info {
+    background-color: #f8f9fa;
+    border-radius: 8px;
+    padding: 1rem;
+    margin-bottom: 1rem;
 
-  .checkbox-group {
-    .checkbox-label {
+    .timeslot-info-item {
       display: flex;
-      align-items: center;
+      margin-bottom: 0.5rem;
+
+      &:last-child {
+        margin-bottom: 0;
+      }
+
+      .info-label {
+        width: 120px;
+        font-weight: 500;
+        color: #666;
+      }
+
+      .info-value {
+        font-weight: 600;
+        color: #333;
+      }
+    }
+  }
+
+  .quick-price-suggestions {
+    margin-top: 1rem;
+
+    .suggestions-label {
+      display: block;
+      font-size: 0.9rem;
+      color: #666;
+      margin-bottom: 0.5rem;
+    }
+
+    .quick-price-buttons {
+      display: flex;
+      flex-wrap: wrap;
       gap: 0.5rem;
-      cursor: pointer;
+
+      .quick-price-button {
+        background-color: var(--light-gray);
+        border: none;
+        border-radius: 4px;
+        padding: 0.5rem 0.75rem;
+        font-size: 0.9rem;
+        cursor: pointer;
+        transition: all 0.2s ease;
+
+        &:hover {
+          background-color: var(--primary-color);
+          color: white;
+        }
+
+        &.active {
+          background-color: var(--primary-color);
+          color: white;
+        }
+      }
+    }
+  }
+
+  .availability-toggle {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+
+    .toggle-label {
+      font-weight: 500;
+    }
+
+    .toggle-status {
+      font-weight: 500;
+
+      &.available {
+        color: #2e7d32;
+      }
+
+      &.unavailable {
+        color: #c62828;
+      }
+    }
+
+    /* Toggle Switch Styles */
+    .switch {
+      position: relative;
+      display: inline-block;
+      width: 50px;
+      height: 24px;
 
       input {
-        width: 18px;
-        height: 18px;
+        opacity: 0;
+        width: 0;
+        height: 0;
+
+        &:checked + .slider {
+          background-color: #4caf50;
+        }
+
+        &:checked + .slider:before {
+          transform: translateX(26px);
+        }
+      }
+
+      .slider {
+        position: absolute;
+        cursor: pointer;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background-color: #ccc;
+        transition: .4s;
+
+        &:before {
+          position: absolute;
+          content: "";
+          height: 16px;
+          width: 16px;
+          left: 4px;
+          bottom: 4px;
+          background-color: white;
+          transition: .4s;
+        }
+
+        &.round {
+          border-radius: 24px;
+
+          &:before {
+            border-radius: 50%;
+          }
+        }
       }
     }
   }

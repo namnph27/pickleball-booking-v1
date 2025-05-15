@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, onUnmounted, reactive } from 'vue';
 import { useRouter } from 'vue-router';
 import { useI18n } from 'vue-i18n';
 import { useCourtStore } from '../../store/court';
@@ -23,6 +23,8 @@ const showDeleteModal = ref(false);
 const courtToDelete = ref<number | null>(null);
 const isDeleting = ref(false);
 const searchQuery = ref('');
+const openDropdownId = ref<number | null>(null);
+const dropdownPositions = reactive<Record<number, { top: number; left: number; right: number }>>({});
 
 // Computed properties
 const courts = computed(() => courtStore.courts);
@@ -32,7 +34,7 @@ const loading = computed(() => courtStore.loading);
 const columns = computed(() => [
   { field: 'name', header: t('courts.name'), sortable: true },
   { field: 'location', header: t('courts.location'), sortable: true },
-  { field: 'hourly_rate', header: t('courts.hourlyRate'), sortable: true, align: 'right' },
+  { field: 'hourly_rate', header: t('courts.hourlyRate'), sortable: true, align: 'right' as const },
   { field: 'skill_level', header: t('common.skillLevel'), sortable: true },
   { field: 'is_available', header: t('courts.availability'), sortable: true }
 ]);
@@ -136,6 +138,67 @@ const handleRowClick = ({ row }: { row: any }) => {
   editCourt(row.id);
 };
 
+// Toggle dropdown menu
+const toggleDropdown = (courtId: number, event: Event) => {
+  // Prevent the event from propagating to document click handler
+  event.stopPropagation();
+
+  // Calculate and store the position of the dropdown toggle button
+  const toggleButton = event.currentTarget as HTMLElement;
+  const rect = toggleButton.getBoundingClientRect();
+
+  dropdownPositions[courtId] = {
+    top: rect.bottom + window.scrollY,
+    left: rect.left + window.scrollX,
+    right: window.innerWidth - (rect.right + window.scrollX)
+  };
+
+  // Toggle dropdown: close if already open, open if closed
+  if (openDropdownId.value === courtId) {
+    openDropdownId.value = null;
+  } else {
+    openDropdownId.value = courtId;
+  }
+};
+
+// Get dropdown position style
+const getDropdownPosition = (courtId: number): Record<string, string> => {
+  const position = dropdownPositions[courtId];
+  if (!position) return {};
+
+  // Check if dropdown would go off the right edge of the screen
+  const rightAligned = position.right < 200; // 200px is the width of the dropdown
+
+  const styles: Record<string, string> = {
+    position: 'fixed',
+    top: `${position.top}px`,
+    zIndex: '1050'
+  };
+
+  if (rightAligned) {
+    styles.right = `${position.right}px`;
+  } else {
+    styles.left = `${position.left}px`;
+  }
+
+  return styles;
+};
+
+// Close dropdown when clicking outside
+const closeDropdowns = () => {
+  openDropdownId.value = null;
+};
+
+// Add document click listener to close dropdowns
+onMounted(() => {
+  document.addEventListener('click', closeDropdowns);
+});
+
+// Remove event listener on unmount
+onUnmounted(() => {
+  document.removeEventListener('click', closeDropdowns);
+});
+
 // Fetch courts on mount
 onMounted(async () => {
   try {
@@ -235,10 +298,10 @@ onMounted(async () => {
               <span>{{ court.location }}</span>
             </div>
 
-            <div class="info-item">
+            <!-- <div class="info-item">
               <i class="pi pi-dollar"></i>
               <span>${{ court.hourly_rate }}/{{ t('courts.hour') }}</span>
-            </div>
+            </div> -->
 
             <div class="info-item">
               <i class="pi pi-users"></i>
@@ -271,27 +334,33 @@ onMounted(async () => {
             />
 
             <div class="dropdown">
-              <button class="dropdown-toggle">
+              <button class="dropdown-toggle" @click="toggleDropdown(court.id, $event)" ref="dropdownToggle">
                 <i class="pi pi-ellipsis-v"></i>
               </button>
 
-              <div class="dropdown-menu">
-                <button
-                  class="dropdown-item"
-                  @click="toggleAvailability(court.id, court.is_available)"
+              <Teleport to="body">
+                <div
+                  v-if="openDropdownId === court.id"
+                  class="dropdown-menu dropdown-menu--open"
+                  :style="getDropdownPosition(court.id)"
                 >
-                  <i :class="`pi ${court.is_available ? 'pi-eye-slash' : 'pi-eye'}`"></i>
-                  {{ court.is_available ? t('courtOwner.markUnavailable') : t('courtOwner.markAvailable') }}
-                </button>
+                  <button
+                    class="dropdown-item"
+                    @click="toggleAvailability(court.id, court.is_available)"
+                  >
+                    <i :class="`pi ${court.is_available ? 'pi-eye-slash' : 'pi-eye'}`"></i>
+                    {{ court.is_available ? t('courtOwner.markUnavailable') : t('courtOwner.markAvailable') }}
+                  </button>
 
-                <button
-                  class="dropdown-item dropdown-item--danger"
-                  @click="openDeleteModal(court.id)"
-                >
-                  <i class="pi pi-trash"></i>
-                  {{ t('courtOwner.delete') }}
-                </button>
-              </div>
+                  <button
+                    class="dropdown-item dropdown-item--danger"
+                    @click="openDeleteModal(court.id)"
+                  >
+                    <i class="pi pi-trash"></i>
+                    {{ t('courtOwner.delete') }}
+                  </button>
+                </div>
+              </Teleport>
             </div>
           </div>
         </template>
@@ -575,16 +644,32 @@ onMounted(async () => {
       }
 
       .dropdown-menu {
-        position: absolute;
-        top: 100%;
-        right: 0;
         width: 200px;
         background-color: var(--white);
-        border-radius: 4px;
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        border-radius: 8px;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
         padding: 0.5rem 0;
-        z-index: 10;
         display: none;
+        /* Ensure the dropdown is not cut off at the bottom of the screen */
+        max-height: calc(100vh - 100px);
+        overflow-y: auto;
+        /* Add a subtle animation */
+        animation: dropdown-fade-in 0.2s ease-out;
+
+        &--open {
+          display: block;
+        }
+
+        @keyframes dropdown-fade-in {
+          from {
+            opacity: 0;
+            transform: translateY(-10px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
 
         .dropdown-item {
           display: flex;
@@ -611,10 +696,6 @@ onMounted(async () => {
             }
           }
         }
-      }
-
-      &:hover .dropdown-menu {
-        display: block;
       }
     }
   }
@@ -689,5 +770,13 @@ onMounted(async () => {
       }
     }
   }
+}
+
+/* Global styles for teleported dropdown menu */
+:global(.dropdown-menu) {
+  /* These styles will apply to the dropdown menu when teleported to body */
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+  overflow: hidden;
 }
 </style>

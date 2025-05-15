@@ -289,6 +289,8 @@ const Booking = {
 
   // Get bookings by user ID
   async getByUserId(userId) {
+    console.log('Booking.getByUserId: Fetching bookings for user ID:', userId);
+
     const query = `
       SELECT b.*, c.name as court_name, c.location, c.image_url
       FROM bookings b
@@ -298,9 +300,20 @@ const Booking = {
     `;
 
     try {
+      console.log('Booking.getByUserId: Executing query:', query);
       const result = await db.query(query, [userId]);
+      console.log(`Booking.getByUserId: Found ${result.rows.length} bookings for user ID ${userId}`);
+
+      if (result.rows.length === 0) {
+        console.log('Booking.getByUserId: No bookings found for this user');
+      } else {
+        console.log('Booking.getByUserId: First booking:', result.rows[0]);
+      }
+
       return result.rows;
     } catch (error) {
+      console.error('Booking.getByUserId: Error fetching bookings:', error);
+      console.error('Booking.getByUserId: Error stack:', error.stack);
       throw error;
     }
   },

@@ -97,6 +97,14 @@ export function useApi() {
     error.value = null;
 
     try {
+      // Check if user is authenticated for protected endpoints
+      const token = localStorage.getItem('token');
+      if (!url.includes('/api/auth/') && !token) {
+        console.warn(`API ${method.toUpperCase()} request to ${url} without authentication token`);
+      } else {
+        console.log(`API ${method.toUpperCase()} request to ${url} with token:`, token ? 'Present' : 'Missing');
+      }
+
       console.log(`API ${method.toUpperCase()} request to ${url}`, method !== 'get' ? data : undefined);
 
       const response = await api({
@@ -115,6 +123,12 @@ export function useApi() {
       return response.data;
     } catch (err: any) {
       console.error(`API ${method.toUpperCase()} error for ${url}:`, err);
+
+      // Log more detailed error information
+      if (err.response) {
+        console.error('Error response status:', err.response.status);
+        console.error('Error response data:', err.response.data);
+      }
 
       if (showToast) {
         toast.apiError(err);

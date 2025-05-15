@@ -46,15 +46,26 @@ export function useBookingService() {
 
   // Booking endpoints
   const createBooking = (bookingData: BookingRequest) => {
+    // Pass false as the third parameter to prevent showing toast message
     return post<{
       booking: Booking;
       discount_amount: number;
       applied_promotion: { code: string; discount_percent: number } | null;
-    }>('/api/bookings', bookingData);
+    }>('/api/bookings', bookingData, false);
   };
 
   const getUserBookings = () => {
-    return get<{ bookings: Booking[] }>('/api/bookings/my-bookings');
+    console.log('BookingService: Calling getUserBookings API endpoint...');
+
+    // Ensure the token is in localStorage
+    const token = localStorage.getItem('token');
+    if (!token) {
+      console.error('BookingService: No authentication token found');
+      throw new Error('Authentication required');
+    }
+
+    // Make the API request with explicit showToast=false to handle errors in the component
+    return get<{ bookings: Booking[] }>('/api/bookings/my-bookings', undefined, false);
   };
 
   const getBookingById = (id: number) => {

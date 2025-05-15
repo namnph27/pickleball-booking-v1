@@ -239,10 +239,21 @@ const createBooking = async (req, res) => {
 // Get all bookings for current user
 const getUserBookings = async (req, res) => {
   try {
+    console.log('getUserBookings: Request received for user ID:', req.user.id);
+
+    // Verify user authentication
+    if (!req.user || !req.user.id) {
+      console.error('getUserBookings: No authenticated user found in request');
+      return res.status(401).json({ message: 'User not authenticated' });
+    }
+
     const bookings = await Booking.getByUserId(req.user.id);
+    console.log(`getUserBookings: Found ${bookings.length} bookings for user ID ${req.user.id}`);
+
     res.status(200).json({ bookings });
   } catch (error) {
     console.error('Get user bookings error:', error);
+    console.error('Error stack:', error.stack);
     res.status(500).json({ message: 'Server error while fetching bookings' });
   }
 };

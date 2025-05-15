@@ -29,23 +29,56 @@ const loading = computed(() => bookingStore.loading);
 
 // Format date
 const formatDate = (dateString: string) => {
-  const date = new Date(dateString);
-  return date.toLocaleDateString(undefined, {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric'
-  });
+  try {
+    if (!dateString) return 'N/A';
+
+    const date = new Date(dateString);
+
+    // Check if date is valid
+    if (isNaN(date.getTime())) {
+      console.error('Invalid date string:', dateString);
+      return 'Invalid Date';
+    }
+
+    return date.toLocaleDateString(undefined, {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    });
+  } catch (error) {
+    console.error('Error formatting date:', error);
+    return 'Error';
+  }
 };
 
 // Format time
 const formatTime = (timeString: string) => {
-  const date = new Date(timeString);
-  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  try {
+    if (!timeString) return 'N/A';
+
+    const date = new Date(timeString);
+
+    // Check if date is valid
+    if (isNaN(date.getTime())) {
+      console.error('Invalid time string:', timeString);
+      return 'Invalid Time';
+    }
+
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  } catch (error) {
+    console.error('Error formatting time:', error);
+    return 'Error';
+  }
 };
 
 // Get booking status class
 const getStatusClass = (status: string) => {
-  switch (status) {
+  if (!status) {
+    console.warn('Booking status is undefined or null');
+    return 'status-unknown';
+  }
+
+  switch (status.toLowerCase()) {
     case 'confirmed':
       return 'status-confirmed';
     case 'pending':
@@ -55,7 +88,8 @@ const getStatusClass = (status: string) => {
     case 'completed':
       return 'status-completed';
     default:
-      return '';
+      console.warn('Unknown booking status:', status);
+      return 'status-unknown';
   }
 };
 
@@ -73,9 +107,9 @@ const openCancelModal = (bookingId: number) => {
 // Cancel booking
 const cancelBooking = async () => {
   if (!bookingToCancel.value) return;
-  
+
   isCancelling.value = true;
-  
+
   try {
     await bookingStore.cancelBooking(bookingToCancel.value);
     toast.success(t('booking.cancelSuccess'));
@@ -90,9 +124,27 @@ const cancelBooking = async () => {
 
 // Fetch bookings on mount
 onMounted(async () => {
+  console.log('BookingsPage: Fetching user bookings...');
   try {
-    await bookingStore.getUserBookings();
+    // Check if user is authenticated
+    const token = localStorage.getItem('token');
+    if (!token) {
+      console.error('BookingsPage: No authentication token found');
+      toast.error(t('common.authRequired'));
+      router.push('/login');
+      return;
+    }
+
+    // Fetch bookings
+    const bookings = await bookingStore.getUserBookings();
+    console.log('BookingsPage: Bookings fetched successfully:', bookings);
+
+    // If no bookings were returned, log a message
+    if (!bookings || bookings.length === 0) {
+      console.log('BookingsPage: No bookings found for this user');
+    }
   } catch (error) {
+    console.error('BookingsPage: Error fetching bookings:', error);
     toast.error(typeof error === 'string' ? error : t('booking.fetchError'));
   }
 });
@@ -102,95 +154,95 @@ onMounted(async () => {
   <BaseLayout :title="t('booking.myBookings')">
     <!-- Tabs -->
     <div class="booking-tabs">
-      <button 
-        class="tab-button" 
+      <button
+        class="tab-button"
         :class="{ 'active': activeTab === 'upcoming' }"
         @click="activeTab = 'upcoming'"
       >
         {{ t('booking.upcomingBookings') }}
         <span v-if="upcomingBookings.length > 0" class="tab-count">{{ upcomingBookings.length }}</span>
       </button>
-      
-      <button 
-        class="tab-button" 
+
+      <button
+        class="tab-button"
         :class="{ 'active': activeTab === 'past' }"
         @click="activeTab = 'past'"
       >
         {{ t('booking.pastBookings') }}
       </button>
     </div>
-    
+
     <!-- Loading State -->
     <div v-if="loading" class="bookings-loading">
       <BaseSpinner />
     </div>
-    
+
     <!-- Upcoming Bookings -->
     <div v-else-if="activeTab === 'upcoming'" class="bookings-container">
       <div v-if="upcomingBookings.length === 0" class="no-bookings">
         <i class="pi pi-calendar-times no-bookings-icon"></i>
         <h3>{{ t('booking.noUpcomingBookings') }}</h3>
         <p>{{ t('booking.bookingsDescription') }}</p>
-        <BaseButton 
-          :label="t('booking.findCourts')" 
+        <BaseButton
+          :label="t('booking.findCourts')"
           variant="primary"
           @click="router.push('/courts')"
         />
       </div>
-      
+
       <div v-else class="bookings-grid">
-        <BaseCard 
-          v-for="booking in upcomingBookings" 
+        <BaseCard
+          v-for="booking in upcomingBookings"
           :key="booking.id"
           class="booking-card"
         >
           <template #header>
             <div class="booking-header">
               <div class="booking-court">
-                <h3 class="court-name">{{ booking.court_name }}</h3>
+                <h3 class="court-name">{{ booking.court_name || 'Unknown Court' }}</h3>
                 <p class="court-location">
-                  <i class="pi pi-map-marker"></i> {{ booking.location }}
+                  <i class="pi pi-map-marker"></i> {{ booking.location || 'Unknown Location' }}
                 </p>
               </div>
-              
+
               <div class="booking-status">
                 <span :class="['status-badge', getStatusClass(booking.status)]">
-                  {{ t(`booking.${booking.status}`) }}
+                  {{ booking.status ? t(`booking.${booking.status}`) : t('booking.unknown') }}
                 </span>
               </div>
             </div>
           </template>
-          
+
           <div class="booking-details">
             <div class="booking-info">
               <div class="info-item">
                 <i class="pi pi-calendar"></i>
                 <span>{{ formatDate(booking.start_time) }}</span>
               </div>
-              
+
               <div class="info-item">
                 <i class="pi pi-clock"></i>
                 <span>{{ formatTime(booking.start_time) }} - {{ formatTime(booking.end_time) }}</span>
               </div>
-              
+
               <div class="info-item">
                 <i class="pi pi-dollar"></i>
-                <span>${{ booking.total_price.toFixed(2) }}</span>
+                <span>${{ (typeof booking.total_price === 'number' ? booking.total_price : parseFloat(booking.total_price) || 0).toFixed(2) }}</span>
               </div>
             </div>
           </div>
-          
+
           <template #footer>
             <div class="booking-actions">
-              <BaseButton 
-                :label="t('common.details')" 
+              <BaseButton
+                :label="t('common.details')"
                 variant="outline"
                 @click="viewBookingDetails(booking.id)"
               />
-              
-              <BaseButton 
+
+              <BaseButton
                 v-if="booking.status !== 'cancelled'"
-                :label="t('booking.cancelBooking')" 
+                :label="t('booking.cancelBooking')"
                 variant="danger"
                 @click="openCancelModal(booking.id)"
               />
@@ -199,73 +251,73 @@ onMounted(async () => {
         </BaseCard>
       </div>
     </div>
-    
+
     <!-- Past Bookings -->
     <div v-else-if="activeTab === 'past'" class="bookings-container">
       <div v-if="pastBookings.length === 0" class="no-bookings">
         <i class="pi pi-calendar-times no-bookings-icon"></i>
         <h3>{{ t('booking.noPastBookings') }}</h3>
         <p>{{ t('booking.bookingsDescription') }}</p>
-        <BaseButton 
-          :label="t('booking.findCourts')" 
+        <BaseButton
+          :label="t('booking.findCourts')"
           variant="primary"
           @click="router.push('/courts')"
         />
       </div>
-      
+
       <div v-else class="bookings-grid">
-        <BaseCard 
-          v-for="booking in pastBookings" 
+        <BaseCard
+          v-for="booking in pastBookings"
           :key="booking.id"
           class="booking-card"
         >
           <template #header>
             <div class="booking-header">
               <div class="booking-court">
-                <h3 class="court-name">{{ booking.court_name }}</h3>
+                <h3 class="court-name">{{ booking.court_name || 'Unknown Court' }}</h3>
                 <p class="court-location">
-                  <i class="pi pi-map-marker"></i> {{ booking.location }}
+                  <i class="pi pi-map-marker"></i> {{ booking.location || 'Unknown Location' }}
                 </p>
               </div>
-              
+
               <div class="booking-status">
                 <span :class="['status-badge', getStatusClass(booking.status)]">
-                  {{ t(`booking.${booking.status}`) }}
+                  {{ booking.status ? t(`booking.${booking.status}`) : t('booking.unknown') }}
                 </span>
               </div>
             </div>
           </template>
-          
+
           <div class="booking-details">
             <div class="booking-info">
               <div class="info-item">
                 <i class="pi pi-calendar"></i>
                 <span>{{ formatDate(booking.start_time) }}</span>
               </div>
-              
+
               <div class="info-item">
                 <i class="pi pi-clock"></i>
                 <span>{{ formatTime(booking.start_time) }} - {{ formatTime(booking.end_time) }}</span>
               </div>
-              
+
               <div class="info-item">
                 <i class="pi pi-dollar"></i>
-                <span>${{ booking.total_price.toFixed(2) }}</span>
+                <span>${{ (typeof booking.total_price === 'number' ? booking.total_price : parseFloat(booking.total_price) || 0).toFixed(2) }}</span>
               </div>
             </div>
           </div>
-          
+
           <template #footer>
             <div class="booking-actions">
-              <BaseButton 
-                :label="t('common.details')" 
+              <BaseButton
+                :label="t('common.details')"
                 variant="outline"
                 @click="viewBookingDetails(booking.id)"
               />
-              
-              <BaseButton 
+
+              <BaseButton
                 v-if="booking.status === 'completed'"
-                :label="t('booking.writeReview')" 
+                :label="t('booking.writeReview')"
                 variant="secondary"
                 @click="router.push(`/courts/${booking.court_id}/review`)"
               />
@@ -274,7 +326,7 @@ onMounted(async () => {
         </BaseCard>
       </div>
     </div>
-    
+
     <!-- Cancel Booking Modal -->
     <BaseModal
       v-model="showCancelModal"
@@ -286,7 +338,7 @@ onMounted(async () => {
       @ok="cancelBooking"
     >
       <BaseAlert type="warning" :message="t('booking.cancelWarning')" />
-      
+
       <div class="cancellation-policy">
         <h4>{{ t('booking.cancellationPolicy') }}</h4>
         <ul>
@@ -304,7 +356,7 @@ onMounted(async () => {
   display: flex;
   margin-bottom: 2rem;
   border-bottom: 1px solid var(--medium-gray);
-  
+
   .tab-button {
     padding: 1rem 1.5rem;
     background: none;
@@ -314,10 +366,10 @@ onMounted(async () => {
     color: var(--dark-gray);
     cursor: pointer;
     position: relative;
-    
+
     &.active {
       color: var(--primary-color);
-      
+
       &::after {
         content: '';
         position: absolute;
@@ -328,7 +380,7 @@ onMounted(async () => {
         background-color: var(--primary-color);
       }
     }
-    
+
     .tab-count {
       display: inline-flex;
       align-items: center;
@@ -357,19 +409,19 @@ onMounted(async () => {
   justify-content: center;
   padding: 3rem 0;
   text-align: center;
-  
+
   .no-bookings-icon {
     font-size: 3rem;
     color: var(--dark-gray);
     margin-bottom: 1rem;
   }
-  
+
   h3 {
     font-size: 1.25rem;
     font-weight: 600;
     margin-bottom: 0.5rem;
   }
-  
+
   p {
     color: var(--dark-gray);
     margin-bottom: 1.5rem;
@@ -385,32 +437,32 @@ onMounted(async () => {
 
 .booking-card {
   height: 100%;
-  
+
   .booking-header {
     display: flex;
     justify-content: space-between;
     align-items: flex-start;
-    
+
     .booking-court {
       .court-name {
         font-size: 1.25rem;
         font-weight: 600;
         margin: 0 0 0.25rem 0;
       }
-      
+
       .court-location {
         display: flex;
         align-items: center;
         gap: 0.5rem;
         font-size: 0.875rem;
         color: var(--dark-gray);
-        
+
         i {
           color: var(--primary-color);
         }
       }
     }
-    
+
     .booking-status {
       .status-badge {
         display: inline-block;
@@ -418,43 +470,48 @@ onMounted(async () => {
         border-radius: 4px;
         font-size: 0.75rem;
         font-weight: 500;
-        
+
         &.status-confirmed {
           background-color: rgba(76, 175, 80, 0.1);
           color: #2e7d32;
         }
-        
+
         &.status-pending {
           background-color: rgba(255, 152, 0, 0.1);
           color: #ef6c00;
         }
-        
+
         &.status-cancelled {
           background-color: rgba(244, 67, 54, 0.1);
           color: #c62828;
         }
-        
+
         &.status-completed {
           background-color: rgba(33, 150, 243, 0.1);
           color: #0277bd;
         }
+
+        &.status-unknown {
+          background-color: rgba(158, 158, 158, 0.1);
+          color: #616161;
+        }
       }
     }
   }
-  
+
   .booking-details {
     margin: 1rem 0;
-    
+
     .booking-info {
       display: flex;
       flex-direction: column;
       gap: 0.75rem;
-      
+
       .info-item {
         display: flex;
         align-items: center;
         gap: 0.75rem;
-        
+
         i {
           color: var(--primary-color);
           width: 16px;
@@ -462,7 +519,7 @@ onMounted(async () => {
       }
     }
   }
-  
+
   .booking-actions {
     display: flex;
     gap: 0.5rem;
@@ -471,16 +528,16 @@ onMounted(async () => {
 
 .cancellation-policy {
   margin-top: 1.5rem;
-  
+
   h4 {
     font-size: 1rem;
     font-weight: 600;
     margin-bottom: 0.75rem;
   }
-  
+
   ul {
     padding-left: 1.5rem;
-    
+
     li {
       margin-bottom: 0.5rem;
       color: var(--dark-gray);
@@ -496,21 +553,21 @@ onMounted(async () => {
       text-align: center;
     }
   }
-  
+
   .bookings-grid {
     grid-template-columns: 1fr;
   }
-  
+
   .booking-card {
     .booking-header {
       flex-direction: column;
       gap: 0.5rem;
-      
+
       .booking-status {
         align-self: flex-start;
       }
     }
-    
+
     .booking-actions {
       flex-direction: column;
     }

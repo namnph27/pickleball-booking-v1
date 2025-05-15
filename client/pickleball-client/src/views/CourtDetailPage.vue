@@ -142,6 +142,9 @@ const formatPhoneNumber = (phone) => {
 
 // Fetch court details and availability on mount
 onMounted(async () => {
+  // Scroll to top of the page when component mounts
+  window.scrollTo({ top: 0, behavior: 'instant' });
+
   if (!courtId.value) return;
 
   try {

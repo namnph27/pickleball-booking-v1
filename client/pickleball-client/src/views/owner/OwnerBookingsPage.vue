@@ -73,38 +73,38 @@ const columns = computed(() => [
 // Filtered bookings
 const filteredBookings = computed(() => {
   let filtered = [...bookings.value];
-  
+
   // Filter by court
   if (selectedCourt.value) {
     filtered = filtered.filter(booking => booking.court_id === selectedCourt.value);
   }
-  
+
   // Filter by status
   if (selectedStatus.value) {
     filtered = filtered.filter(booking => booking.status === selectedStatus.value);
   }
-  
+
   // Filter by tab
   if (activeTab.value === 'upcoming') {
-    filtered = filtered.filter(booking => 
-      (booking.status === 'pending' || booking.status === 'confirmed') && 
+    filtered = filtered.filter(booking =>
+      (booking.status === 'pending' || booking.status === 'confirmed') &&
       new Date(booking.start_time) > new Date()
     );
   } else if (activeTab.value === 'past') {
-    filtered = filtered.filter(booking => 
-      booking.status === 'completed' || 
-      booking.status === 'cancelled' || 
+    filtered = filtered.filter(booking =>
+      booking.status === 'completed' ||
+      booking.status === 'cancelled' ||
       new Date(booking.start_time) <= new Date()
     );
   }
-  
+
   // Sort by date (newest first for past, soonest first for upcoming)
   filtered.sort((a, b) => {
     const dateA = new Date(a.start_time).getTime();
     const dateB = new Date(b.start_time).getTime();
     return activeTab.value === 'upcoming' ? dateA - dateB : dateB - dateA;
   });
-  
+
   return filtered;
 });
 
@@ -149,7 +149,7 @@ const getStatusClass = (status: string) => {
 const openStatusModal = (bookingId: number) => {
   const booking = bookings.value.find(b => b.id === bookingId);
   if (!booking) return;
-  
+
   bookingToUpdate.value = bookingId;
   newStatus.value = booking.status;
   showStatusModal.value = true;
@@ -158,12 +158,12 @@ const openStatusModal = (bookingId: number) => {
 // Update booking status
 const updateBookingStatus = async () => {
   if (!bookingToUpdate.value || !newStatus.value) return;
-  
+
   isUpdating.value = true;
-  
+
   try {
     await bookingStore.updateBookingStatus(bookingToUpdate.value, newStatus.value as any);
-    
+
     toast.success(t('courtOwner.statusUpdated'));
     showStatusModal.value = false;
   } catch (error) {
@@ -177,16 +177,24 @@ const updateBookingStatus = async () => {
 // Fetch courts and bookings on mount
 onMounted(async () => {
   try {
+    // Reset bookings array before fetching new data
+    bookingStore.reset();
+
     // Fetch courts first
     await courtStore.getCourtsByOwner();
-    
+
     // Then fetch bookings for all courts
     if (courts.value.length > 0) {
-      for (const court of courts.value) {
-        await bookingStore.getCourtBookings(court.id);
+      for (let i = 0; i < courts.value.length; i++) {
+        const court = courts.value[i];
+        // Use append=true for all courts except the first one
+        await bookingStore.getCourtBookings(court.id, i > 0);
       }
     }
+
+    console.log(`Loaded ${bookings.value.length} bookings for ${courts.value.length} courts`);
   } catch (error) {
+    console.error('Error loading bookings data:', error);
     toast.error(typeof error === 'string' ? error : t('courtOwner.fetchError'));
   }
 });
@@ -197,16 +205,16 @@ onMounted(async () => {
     <!-- Header Actions -->
     <template #headerActions>
       <div class="view-toggle">
-        <button 
-          class="toggle-button" 
+        <button
+          class="toggle-button"
           :class="{ 'active': viewMode === 'grid' }"
           @click="viewMode = 'grid'"
         >
           <i class="pi pi-th-large"></i>
         </button>
-        
-        <button 
-          class="toggle-button" 
+
+        <button
+          class="toggle-button"
           :class="{ 'active': viewMode === 'table' }"
           @click="viewMode = 'table'"
         >
@@ -214,26 +222,26 @@ onMounted(async () => {
         </button>
       </div>
     </template>
-    
+
     <!-- Tabs -->
     <div class="booking-tabs">
-      <button 
-        class="tab-button" 
+      <button
+        class="tab-button"
         :class="{ 'active': activeTab === 'upcoming' }"
         @click="activeTab = 'upcoming'"
       >
         {{ t('booking.upcomingBookings') }}
       </button>
-      
-      <button 
-        class="tab-button" 
+
+      <button
+        class="tab-button"
         :class="{ 'active': activeTab === 'past' }"
         @click="activeTab = 'past'"
       >
         {{ t('booking.pastBookings') }}
       </button>
     </div>
-    
+
     <!-- Filters -->
     <div class="booking-filters">
       <div class="filter-group">
@@ -243,7 +251,7 @@ onMounted(async () => {
           :placeholder="t('courtOwner.selectCourt')"
         />
       </div>
-      
+
       <div class="filter-group">
         <BaseSelect
           v-model="selectedStatus"
@@ -252,19 +260,19 @@ onMounted(async () => {
         />
       </div>
     </div>
-    
+
     <!-- Loading State -->
     <div v-if="loading" class="bookings-loading">
       <BaseSpinner />
     </div>
-    
+
     <!-- No Bookings -->
     <div v-else-if="filteredBookings.length === 0" class="no-bookings">
       <i class="pi pi-calendar-times no-bookings-icon"></i>
       <h3>{{ activeTab === 'upcoming' ? t('courtOwner.noUpcomingBookings') : t('courtOwner.noPastBookings') }}</h3>
       <p>{{ t('courtOwner.bookingsDescription') }}</p>
     </div>
-    
+
     <!-- Table View -->
     <div v-else-if="viewMode === 'table'" class="bookings-table">
       <BaseTable
@@ -278,28 +286,28 @@ onMounted(async () => {
         <template #cell(id)="{ value }">
           #{{ value }}
         </template>
-        
+
         <!-- Date/Time Column -->
         <template #cell(start_time)="{ value }">
           {{ formatDateTime(value) }}
         </template>
-        
+
         <!-- Price Column -->
         <template #cell(total_price)="{ value }">
           ${{ value.toFixed(2) }}
         </template>
-        
+
         <!-- Status Column -->
         <template #cell(status)="{ value }">
           <span :class="['status-badge', getStatusClass(value)]">
             {{ t(`booking.${value}`) }}
           </span>
         </template>
-        
+
         <!-- Actions Column -->
         <template #actions="{ row }">
           <div class="table-actions">
-            <button 
+            <button
               class="action-button"
               @click="openStatusModal(row.id)"
               title="Update Status"
@@ -310,11 +318,11 @@ onMounted(async () => {
         </template>
       </BaseTable>
     </div>
-    
+
     <!-- Grid View -->
     <div v-else class="bookings-grid">
-      <BaseCard 
-        v-for="booking in filteredBookings" 
+      <BaseCard
+        v-for="booking in filteredBookings"
         :key="booking.id"
         class="booking-card"
       >
@@ -324,7 +332,7 @@ onMounted(async () => {
               <span class="id-label">{{ t('booking.bookingId') }}:</span>
               <span class="id-value">#{{ booking.id }}</span>
             </div>
-            
+
             <div class="booking-status">
               <span :class="['status-badge', getStatusClass(booking.status)]">
                 {{ t(`booking.${booking.status}`) }}
@@ -332,40 +340,40 @@ onMounted(async () => {
             </div>
           </div>
         </template>
-        
+
         <div class="booking-details">
           <div class="booking-info">
             <div class="info-item">
               <span class="info-label">{{ t('courts.court') }}:</span>
               <span class="info-value">{{ booking.court_name }}</span>
             </div>
-            
+
             <div class="info-item">
               <span class="info-label">{{ t('booking.customer') }}:</span>
               <span class="info-value">{{ booking.user_name }}</span>
             </div>
-            
+
             <div class="info-item">
               <span class="info-label">{{ t('booking.date') }}:</span>
               <span class="info-value">{{ formatDate(booking.start_time) }}</span>
             </div>
-            
+
             <div class="info-item">
               <span class="info-label">{{ t('booking.time') }}:</span>
               <span class="info-value">{{ formatTime(booking.start_time) }} - {{ formatTime(booking.end_time) }}</span>
             </div>
-            
+
             <div class="info-item">
               <span class="info-label">{{ t('booking.price') }}:</span>
               <span class="info-value">${{ booking.total_price.toFixed(2) }}</span>
             </div>
           </div>
         </div>
-        
+
         <template #footer>
           <div class="booking-actions">
-            <BaseButton 
-              :label="t('courtOwner.updateStatus')" 
+            <BaseButton
+              :label="t('courtOwner.updateStatus')"
               variant="primary"
               @click="openStatusModal(booking.id)"
             />
@@ -373,7 +381,7 @@ onMounted(async () => {
         </template>
       </BaseCard>
     </div>
-    
+
     <!-- Update Status Modal -->
     <BaseModal
       v-model="showStatusModal"
@@ -392,22 +400,22 @@ onMounted(async () => {
             required
           />
         </div>
-        
+
         <div class="status-info">
-          <BaseAlert 
-            v-if="newStatus === 'confirmed'" 
+          <BaseAlert
+            v-if="newStatus === 'confirmed'"
             type="success"
             :message="t('courtOwner.confirmStatusInfo')"
           />
-          
-          <BaseAlert 
-            v-else-if="newStatus === 'cancelled'" 
+
+          <BaseAlert
+            v-else-if="newStatus === 'cancelled'"
             type="warning"
             :message="t('courtOwner.cancelStatusInfo')"
           />
-          
-          <BaseAlert 
-            v-else-if="newStatus === 'completed'" 
+
+          <BaseAlert
+            v-else-if="newStatus === 'completed'"
             type="info"
             :message="t('courtOwner.completeStatusInfo')"
           />
@@ -420,7 +428,7 @@ onMounted(async () => {
 <style scoped lang="scss">
 .view-toggle {
   display: flex;
-  
+
   .toggle-button {
     width: 36px;
     height: 36px;
@@ -431,15 +439,15 @@ onMounted(async () => {
     border: 1px solid var(--medium-gray);
     color: var(--dark-gray);
     cursor: pointer;
-    
+
     &:first-child {
       border-radius: 4px 0 0 4px;
     }
-    
+
     &:last-child {
       border-radius: 0 4px 4px 0;
     }
-    
+
     &.active {
       background-color: var(--primary-color);
       border-color: var(--primary-color);
@@ -452,7 +460,7 @@ onMounted(async () => {
   display: flex;
   margin-bottom: 1.5rem;
   border-bottom: 1px solid var(--medium-gray);
-  
+
   .tab-button {
     padding: 1rem 1.5rem;
     background: none;
@@ -462,10 +470,10 @@ onMounted(async () => {
     color: var(--dark-gray);
     cursor: pointer;
     position: relative;
-    
+
     &.active {
       color: var(--primary-color);
-      
+
       &::after {
         content: '';
         position: absolute;
@@ -483,7 +491,7 @@ onMounted(async () => {
   display: flex;
   gap: 1rem;
   margin-bottom: 1.5rem;
-  
+
   .filter-group {
     width: 250px;
   }
@@ -502,19 +510,19 @@ onMounted(async () => {
   justify-content: center;
   padding: 3rem 0;
   text-align: center;
-  
+
   .no-bookings-icon {
     font-size: 3rem;
     color: var(--dark-gray);
     margin-bottom: 1rem;
   }
-  
+
   h3 {
     font-size: 1.25rem;
     font-weight: 600;
     margin-bottom: 0.5rem;
   }
-  
+
   p {
     color: var(--dark-gray);
     margin-bottom: 1.5rem;
@@ -529,33 +537,33 @@ onMounted(async () => {
     border-radius: 4px;
     font-size: 0.75rem;
     font-weight: 500;
-    
+
     &.status-confirmed {
       background-color: rgba(76, 175, 80, 0.1);
       color: #2e7d32;
     }
-    
+
     &.status-pending {
       background-color: rgba(255, 152, 0, 0.1);
       color: #ef6c00;
     }
-    
+
     &.status-cancelled {
       background-color: rgba(244, 67, 54, 0.1);
       color: #c62828;
     }
-    
+
     &.status-completed {
       background-color: rgba(33, 150, 243, 0.1);
       color: #0277bd;
     }
   }
-  
+
   .table-actions {
     display: flex;
     gap: 0.5rem;
     justify-content: center;
-    
+
     .action-button {
       width: 32px;
       height: 32px;
@@ -567,7 +575,7 @@ onMounted(async () => {
       border-radius: 4px;
       color: var(--dark-gray);
       cursor: pointer;
-      
+
       &:hover {
         background-color: var(--light-gray);
         color: var(--text-color);
@@ -588,18 +596,18 @@ onMounted(async () => {
     justify-content: space-between;
     align-items: center;
     margin-bottom: 1rem;
-    
+
     .booking-id {
       .id-label {
         font-weight: 500;
         margin-right: 0.25rem;
       }
-      
+
       .id-value {
         font-weight: 600;
       }
     }
-    
+
     .booking-status {
       .status-badge {
         display: inline-block;
@@ -607,22 +615,22 @@ onMounted(async () => {
         border-radius: 4px;
         font-size: 0.75rem;
         font-weight: 500;
-        
+
         &.status-confirmed {
           background-color: rgba(76, 175, 80, 0.1);
           color: #2e7d32;
         }
-        
+
         &.status-pending {
           background-color: rgba(255, 152, 0, 0.1);
           color: #ef6c00;
         }
-        
+
         &.status-cancelled {
           background-color: rgba(244, 67, 54, 0.1);
           color: #c62828;
         }
-        
+
         &.status-completed {
           background-color: rgba(33, 150, 243, 0.1);
           color: #0277bd;
@@ -630,28 +638,28 @@ onMounted(async () => {
       }
     }
   }
-  
+
   .booking-details {
     .booking-info {
       display: flex;
       flex-direction: column;
       gap: 0.5rem;
-      
+
       .info-item {
         display: flex;
-        
+
         .info-label {
           width: 100px;
           font-weight: 500;
         }
-        
+
         .info-value {
           flex: 1;
         }
       }
     }
   }
-  
+
   .booking-actions {
     display: flex;
     justify-content: flex-end;
@@ -662,7 +670,7 @@ onMounted(async () => {
   .form-group {
     margin-bottom: 1.5rem;
   }
-  
+
   .status-info {
     margin-bottom: 1rem;
   }
@@ -676,15 +684,15 @@ onMounted(async () => {
       text-align: center;
     }
   }
-  
+
   .booking-filters {
     flex-direction: column;
-    
+
     .filter-group {
       width: 100%;
     }
   }
-  
+
   .bookings-grid {
     grid-template-columns: 1fr;
   }

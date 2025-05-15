@@ -26,6 +26,7 @@
     "login": "Login",
     "register": "Register",
     "logout": "Logout",
+    "authRequired": "Authentication required. Please log in.",
     "search": "Search",
     "filter": "Filter",
     "save": "Save",
@@ -179,6 +180,8 @@
     "accountDeletionWarning": "Account Deletion Warning",
     "afterDeletionInfo": "After your account is deleted, you can register again with the same email address. All data related to this account will be lost.",
     "registrationFailed": "Registration failed. Please try again",
+    "emailAlreadyExists": "This email is already registered. Please use a different email or try logging in.",
+    "phoneAlreadyExists": "This phone number is already registered. Please use a different phone number.",
     "codeRequired": "Verification code is required",
     "twoFactorSetupSuccess": "Two-factor authentication setup successful",
     "twoFactorSetupFailed": "Two-factor authentication setup failed",
@@ -272,10 +275,12 @@
     "bookingDate": "Booking Date",
     "bookingTime": "Booking Time",
     "bookingStatus": "Booking Status",
+    "status": "Status",
     "pending": "Pending",
     "confirmed": "Confirmed",
     "cancelled": "Cancelled",
     "completed": "Completed",
+    "unknown": "Unknown",
     "cancelBooking": "Cancel Booking",
     "dateRequired": "Booking date is required",
     "startTimeRequired": "Start time is required",
@@ -385,6 +390,7 @@
     "totalRevenue": "Total Revenue"
   },
   "courtOwner": {
+    "markAvailable": "Mark Available",
     "myCourts": "My Courts",
     "addCourt": "Add New Court",
     "editCourt": "Edit Court",
@@ -485,7 +491,10 @@
     "deleteTimeslotWarning": "Warning: Deleting a timeslot will affect all future bookings for this time period.",
     "startTime": "Start Time",
     "endTime": "End Time",
-    "timeslotTimeRequired": "Start time and end time are required"
+    "timeslotTimeRequired": "Start time and end time are required",
+    "timeslotPriceRestricted": "Price changes are not allowed for timeslots less than 2 days from now",
+    "timeslotPriceRestrictedAlert": "Price changes are not allowed for timeslots less than 2 days from now. You can only change availability status.",
+    "timeslotPriceRestrictedTooltip": "Price changes are restricted for timeslots within 2 days from today to prevent last-minute price changes"
   },
   "analytics": {
     "selectPeriod": "Select Period",
@@ -694,6 +703,28 @@
     "statusRejected": "Rejected"
   },
 
+  "payment": {
+    "paymentSuccess": "Payment Successful",
+    "paymentFailed": "Payment Failed",
+    "paymentDetails": "Payment Details",
+    "amount": "Amount",
+    "method": "Payment Method",
+    "date": "Payment Date",
+    "transactionId": "Transaction ID",
+    "bookingId": "Booking ID",
+    "status": "Status",
+    "backToBookings": "Back to Bookings",
+    "backToHome": "Back to Home",
+    "tryAgain": "Try Again",
+    "viewReceipt": "View Receipt",
+    "bankTransfer": "Bank Transfer",
+    "rewardPoints": "Reward Points",
+    "creditCard": "Credit Card",
+    "paymentGateway": "Payment Gateway",
+    "paymentSuccessMessage": "Your payment has been processed successfully. Your booking is now confirmed.",
+    "paymentFailedMessage": "There was a problem processing your payment. Please try again or contact support.",
+    "processingPayment": "Processing Payment..."
+  },
   "errors": {
     "pageNotFound": "Page Not Found",
     "pageNotFoundDesc": "The page you are looking for doesn't exist or has been moved.",

@@ -98,16 +98,24 @@ const searchCourts = async () => {
     }
   }
 
+  // Get district label if district is selected
+  const districtLabel = selectedDistrict.value
+    ? districtOptions.value.find(d => d.value === selectedDistrict.value)?.label
+    : '';
+
+  // Create search parameters
   const params = {
     district: selectedDistrict.value,
     date: selectedDate.value,
     price_range: selectedPriceRange.value,
     min_price: minPrice,
     max_price: maxPrice,
-    location: selectedDistrict.value ? districtOptions.value.find(d => d.value === selectedDistrict.value)?.label : ''
+    location: districtLabel
   };
 
-  // Update URL query params
+  console.log('Search parameters:', params);
+
+  // Update URL query params - only include non-empty values
   router.push({
     query: Object.fromEntries(
       Object.entries(params).filter(([_, value]) => value !== undefined && value !== '')
@@ -118,10 +126,16 @@ const searchCourts = async () => {
   currentPage.value = 1;
 
   // Search courts
-  await courtStore.searchCourts(params);
+  try {
+    await courtStore.searchCourts(params);
+    console.log('Search results:', courtStore.filteredCourts);
+  } catch (error) {
+    console.error('Error searching courts:', error);
+  }
 };
 
-const resetFilters = () => {
+const resetFilters = async () => {
+  // Reset all filter values
   selectedDistrict.value = '';
   selectedDate.value = '';
   selectedPriceRange.value = '';
@@ -132,8 +146,17 @@ const resetFilters = () => {
   // Reset pagination
   currentPage.value = 1;
 
-  // Fetch all courts
-  courtStore.fetchAvailableCourts();
+  // Reset search parameters in the store
+  courtStore.searchParams = {};
+
+  // Fetch all available courts
+  try {
+    console.log('Resetting filters and fetching all available courts');
+    await courtStore.fetchAvailableCourts();
+    console.log('Reset successful, courts count:', courtStore.courts.length);
+  } catch (error) {
+    console.error('Error resetting filters:', error);
+  }
 };
 
 const navigateToCourt = (courtId: number) => {

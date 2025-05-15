@@ -272,12 +272,39 @@ const getTopUsersByPoints = async (req, res) => {
 // Create new user
 const createUser = async (req, res) => {
   try {
+    console.log('Admin createUser called with body:', req.body);
     const { name, email, password, phone, role, id_card, tax_code } = req.body;
+
+    // Validate required fields
+    if (!name || !email || !password) {
+      console.error('Missing required fields');
+      return res.status(400).json({ message: 'Name, email, and password are required' });
+    }
+
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      console.error('Invalid email format');
+      return res.status(400).json({ message: 'Invalid email format' });
+    }
+
+    // Validate password length
+    if (password.length < 6) {
+      console.error('Password too short');
+      return res.status(400).json({ message: 'Password must be at least 6 characters long' });
+    }
 
     // Check if email already exists
     const existingUser = await User.findByEmail(email);
     if (existingUser) {
+      console.error('Email already in use:', email);
       return res.status(400).json({ message: 'Email already in use' });
+    }
+
+    // Validate court owner fields if applicable
+    if (role === 'court_owner' && (!id_card || !tax_code)) {
+      console.error('Missing court owner required fields');
+      return res.status(400).json({ message: 'ID card and tax code are required for court owners' });
     }
 
     // Create user
@@ -292,16 +319,23 @@ const createUser = async (req, res) => {
       userData.approval_status = 'approved';
     }
 
+    console.log('Creating user with data:', userData);
     const newUser = await User.create(userData);
+    console.log('User created successfully:', newUser);
 
     // Log admin action
-    await AdminLog.create({
-      admin_id: req.admin.id,
-      action_type: 'create_user',
-      entity_type: 'user',
-      entity_id: newUser.id,
-      details: { user_id: newUser.id, user_email: newUser.email, user_role: newUser.role }
-    });
+    try {
+      await AdminLog.create({
+        admin_id: req.admin.id,
+        action_type: 'create_user',
+        entity_type: 'user',
+        entity_id: newUser.id,
+        details: { user_id: newUser.id, user_email: newUser.email, user_role: newUser.role }
+      });
+    } catch (logError) {
+      // Don't fail the request if logging fails
+      console.error('Error creating admin log:', logError);
+    }
 
     res.status(201).json({
       message: 'User created successfully',
@@ -309,7 +343,41 @@ const createUser = async (req, res) => {
     });
   } catch (error) {
     console.error('Create user error:', error);
-    res.status(500).json({ message: 'Server error while creating user' });
+    console.error('Error stack:', error.stack);
+
+    // Check for specific error messages
+    if (error.message) {
+      if (error.message.includes('Email already in use')) {
+        return res.status(400).json({ message: 'Email already in use' });
+      } else if (error.message.includes('Database schema issue')) {
+        return res.status(500).json({
+          message: 'Database configuration error. Please contact the administrator.',
+          details: error.message
+        });
+      }
+    }
+
+    // Check for specific database errors
+    if (error.code) {
+      if (error.code === '23505') { // Unique violation
+        return res.status(400).json({ message: 'Email already in use' });
+      } else if (error.code === '42P01') { // Undefined table
+        return res.status(500).json({ message: 'Database schema error: Table does not exist' });
+      } else if (error.code === '42703') { // Undefined column
+        return res.status(500).json({ message: 'Database schema error: Column does not exist' });
+      } else if (error.code === '28P01') { // Invalid password
+        return res.status(500).json({ message: 'Database connection error: Invalid password' });
+      } else if (error.code === '3D000') { // Database does not exist
+        return res.status(500).json({ message: 'Database connection error: Database does not exist' });
+      } else if (error.code === 'ECONNREFUSED') { // Connection refused
+        return res.status(500).json({ message: 'Database connection error: Connection refused' });
+      }
+    }
+
+    res.status(500).json({
+      message: 'Server error while creating user',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
   }
 };
 

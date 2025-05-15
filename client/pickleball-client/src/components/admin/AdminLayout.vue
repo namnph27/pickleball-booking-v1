@@ -92,10 +92,10 @@ onMounted(() => {
           <span v-if="!isSidebarCollapsed">Quản lý điểm thưởng</span>
         </router-link>
 
-        <router-link to="/admin/payments" class="nav-item" :class="{ 'active': isActive('/admin/payments') }">
+        <!-- <router-link to="/admin/payments" class="nav-item" :class="{ 'active': isActive('/admin/payments') }">
           <i class="pi pi-wallet"></i>
           <span v-if="!isSidebarCollapsed">Báo cáo thanh toán</span>
-        </router-link>
+        </router-link> -->
 
         <template v-if="isSuperAdmin">
           <div class="nav-divider" v-if="!isSidebarCollapsed">
